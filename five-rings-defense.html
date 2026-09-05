@@ -1,0 +1,332 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Five Rings Defense">
+<meta name="theme-color" content="#232a33">
+<title>Five Rings Defense – Air University Arcade</title>
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+<style>
+  :root{--bg:#232a33;--panel:#2e3742;--text:#e6e1d3;--muted:#9aa4ad;--accent:#f2c14e}
+  *{box-sizing:border-box}
+  html,body{margin:0;background:var(--bg);color:var(--text);font-family:"Press Start 2P","Courier New",monospace}
+  body{min-height:100vh;min-height:100dvh;display:flex;flex-direction:column;align-items:center;
+    padding:max(24px,env(safe-area-inset-top)) 12px max(40px,env(safe-area-inset-bottom));
+    touch-action:manipulation;-webkit-user-select:none;user-select:none;-webkit-tap-highlight-color:transparent;
+    overscroll-behavior:none}
+  header{width:100%;max-width:440px;font-size:9px;color:var(--muted);display:flex;justify-content:space-between;margin-bottom:28px}
+  h1{font-size:18px;line-height:1.5;margin:0 0 10px;color:var(--accent)}
+  .tag{font-size:9px;line-height:2;max-width:420px;margin:0 0 18px}
+  .tag em{font-style:normal;color:var(--muted)}
+  .cab{background:var(--panel);padding:10px;border-radius:6px;box-shadow:0 0 0 4px #14181d,0 0 0 6px #4a5561}
+  canvas{display:block;width:min(400px,calc(100vw - 44px));aspect-ratio:2/3;height:auto;background:#1b2128;
+    touch-action:none;cursor:pointer;outline:none;image-rendering:pixelated}
+  canvas:focus-visible{box-shadow:0 0 0 3px var(--accent)}
+  footer{font-size:8px;line-height:1.9;color:var(--muted);max-width:420px;margin-top:26px;text-align:center}
+</style>
+</head>
+<body>
+<header><span>Air University Arcade</span><span>Now playing</span></header>
+<h1>Five Rings Defense</h1>
+<p class="tag">Defend Leadership. Build on the inner rings.<br>
+<em>Doctrine prohibits building on Fielded Forces. Warden is watching.</em></p>
+<div class="cab"><canvas id="g" width="400" height="600" tabindex="0"
+  aria-label="Five Rings Defense. Tap a pad on an inner ring to build or upgrade a turret."></canvas></div>
+<footer>The enemy is a system. So is the syllabus.<br>Not affiliated with Air University. Obviously.</footer>
+
+<script>
+(() => {
+const W = 400, H = 600, CX = 200, CY = 345, TOP = 100;
+const cv = document.getElementById('g');
+const ctx = cv.getContext('2d');
+function fit() {
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  cv.width = W * dpr; cv.height = H * dpr;
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.imageSmoothingEnabled = false;
+}
+fit(); addEventListener('resize', fit);
+
+// ---------- content ----------
+const RINGS = [
+  { r: 24,  name: 'LEADERSHIP',        slots: 0,  bonus: 0 },
+  { r: 66,  name: 'SYSTEM ESSENTIALS', slots: 4,  bonus: 1.5 },
+  { r: 108, name: 'INFRASTRUCTURE',    slots: 6,  bonus: 1.25 },
+  { r: 150, name: 'POPULATION',        slots: 8,  bonus: 1.0 },
+  { r: 190, name: 'FIELDED FORCES',    slots: 10, bonus: 0, banned: true },
+];
+const WARDEN = [
+  'Strike the center, not the edges.',
+  'Parallel attack. All rings. Simultaneously.',
+  'The enemy is a system.',
+  'Fielded forces are the least important ring.',
+  'Bombing runways is passe.',
+  'Every problem is airpower-shaped.',
+  'Decapitation is a strategy, not a mood.',
+  'If it has five rings, it is a system. If it has four, keep looking.',
+];
+const BANNED_MSGS = ['Doctrine prohibits: Fielded Forces', 'Warden says: strike the center', 'Attrition is not a strategy', 'Warden is watching', 'That is an Army solution', 'Denied. Read Chapter 2.'];
+const TYPES = {
+  grunt: { hp: w => 6 + w * 2.2,  sp: 32, dmg: 1, credit: 6,  size: 7,  col: '#d9483b', name: 'INFANTRY' },
+  fast:  { hp: w => 4 + w * 1.2,  sp: 62, dmg: 1, credit: 5,  size: 5,  col: '#f08a3c', name: 'RECON' },
+  armor: { hp: w => 20 + w * 6,   sp: 20, dmg: 2, credit: 14, size: 10, col: '#8e3a35', name: 'ARMOR' },
+  boss:  { hp: w => 90 + w * 18,  sp: 14, dmg: 4, credit: 60, size: 14, col: '#5e2a70', name: 'LAND COMPONENT CDR' },
+};
+const GRADES = [
+  [12, 'A. The enemy was a system. So were you.'],
+  [8,  'B. Effective parallel attack. Some attrition noted.'],
+  [4,  'C. You defended the population. Warden weeps.'],
+  [2,  'D. Built turrets facing the wrong ring.'],
+  [0,  'F. Did not read Warden. Or the map.'],
+];
+const grade = w => GRADES.find(g => w >= g[0])[1];
+const rnd = (a, b) => a + Math.random() * (b - a);
+const pick = a => a[Math.floor(Math.random() * a.length)];
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+const dist = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
+
+// ---------- state ----------
+let state = 'title', t = 0, last = 0, best = 0;
+let wave, credits, hp, pads, enemies, tracers, toasts, banner, phase, phaseT, queue, spawnT, kills,
+    turretsBuilt, bannedTries, deadAt, endReason, flashHp;
+
+function buildPads() {
+  pads = [];
+  RINGS.forEach((ring, ri) => {
+    for (let i = 0; i < ring.slots; i++) {
+      const a = -Math.PI / 2 + (i / ring.slots) * Math.PI * 2 + (ri % 2 ? Math.PI / ring.slots : 0);
+      pads.push({ x: CX + Math.cos(a) * ring.r, y: CY + Math.sin(a) * ring.r, ring: ri, lvl: 0, cool: 0, aim: a, banned: !!ring.banned });
+    }
+  });
+}
+function reset() {
+  wave = 0; credits = 110; hp = 10; enemies = []; tracers = []; toasts = []; kills = 0; turretsBuilt = 0; bannedTries = 0;
+  t = 0; endReason = ''; flashHp = 0; buildPads();
+  phase = 'inter'; phaseT = 5; banner = { text: 'WARDEN SAYS', sub: 'Build on the inner rings. Wave 1 in 5.', ttl: 5 };
+}
+reset();
+
+function startWave() {
+  wave++; phase = 'wave'; queue = [];
+  const n = 5 + wave * 2;
+  for (let i = 0; i < n; i++) queue.push(Math.random() < 0.2 + wave * 0.02 ? 'armor' : Math.random() < 0.3 ? 'fast' : 'grunt');
+  if (wave % 5 === 0) queue.push('boss');
+  spawnT = 0;
+}
+function spawn(type) {
+  const a = rnd(0, Math.PI * 2), T = TYPES[type];
+  const e = { type, x: CX + Math.cos(a) * 290, y: CY + Math.sin(a) * 290, a, hp: T.hp(wave), max: T.hp(wave), sp: T.sp, dmg: T.dmg, size: T.size, credit: T.credit, col: T.col };
+  enemies.push(e);
+  if (type === 'boss') toast(T.name + ' INBOUND', false);
+}
+const buildCost = () => 40 + turretsBuilt * 8;
+const upCost = p => 45 + p.lvl * 25;
+function toast(s, good) { toasts.push({ s, ttl: 2, good }); toasts = toasts.slice(-4); }
+
+// ---------- input ----------
+function canvasPoint(e) {
+  const r = cv.getBoundingClientRect();
+  return { x: (e.clientX - r.left) * W / r.width, y: (e.clientY - r.top) * H / r.height };
+}
+function press(e) {
+  e.preventDefault(); cv.focus();
+  if (state === 'title') { state = 'play'; reset(); return; }
+  if (state === 'dead') { if (t - deadAt > 0.8) { state = 'play'; reset(); } return; }
+  const p = canvasPoint(e);
+  let pad = null, bd = 24;
+  for (const q of pads) { const d = dist(q, p); if (d < bd) { bd = d; pad = q; } }
+  if (!pad) return;
+  if (pad.banned) { bannedTries++; toast(BANNED_MSGS[Math.min(bannedTries - 1, BANNED_MSGS.length - 1)], false); pad.shake = 0.4; return; }
+  if (pad.lvl === 0) {
+    if (credits < buildCost()) { toast('NEED $' + buildCost() + ' AIRPOWER', false); return; }
+    credits -= buildCost(); turretsBuilt++; pad.lvl = 1; toast('TURRET ON ' + RINGS[pad.ring].name, true);
+  } else if (pad.lvl < 3) {
+    if (credits < upCost(pad)) { toast('UPGRADE $' + upCost(pad), false); return; }
+    credits -= upCost(pad); pad.lvl++; toast('LVL ' + pad.lvl + ' — MORE PARALLEL', true);
+  } else toast('MAX. Warden approves.', true);
+}
+cv.addEventListener('pointerdown', press);
+addEventListener('keydown', e => { if ((e.code === 'Space' || e.code === 'Enter') && state !== 'play') { e.preventDefault(); press(e); } });
+
+// ---------- update ----------
+function update(dt) {
+  t += dt;
+  if (state !== 'play') return;
+
+  if (phase === 'inter') { phaseT -= dt; if (phaseT <= 0) startWave(); }
+  else {
+    spawnT -= dt;
+    if (queue.length && spawnT <= 0) { spawn(queue.shift()); spawnT = Math.max(0.35, 1.1 - wave * 0.05); }
+    if (!queue.length && !enemies.length) {
+      const bonus = 20 + wave * 5; credits += bonus; best = Math.max(best, wave);
+      phase = 'inter'; phaseT = 5;
+      banner = { text: 'WARDEN SAYS', sub: pick(WARDEN) + '  (+$' + bonus + ')', ttl: 5 };
+    }
+  }
+
+  // enemies march inward
+  for (const en of enemies) {
+    const d = dist(en, { x: CX, y: CY });
+    if (d <= RINGS[0].r + 2) { hp -= en.dmg; en.hp = 0; flashHp = 0.5; toast(TYPES[en.type].name + ' HIT LEADERSHIP', false); continue; }
+    const vx = (CX - en.x) / d, vy = (CY - en.y) / d;
+    en.x += vx * en.sp * dt; en.y += vy * en.sp * dt;
+  }
+  // turrets fire
+  for (const p of pads) {
+    if (!p.lvl) continue;
+    p.cool -= dt;
+    const bonus = RINGS[p.ring].bonus;
+    const range = (60 + p.lvl * 14) * bonus, dmg = (2 + p.lvl * 1.5) * bonus;
+    let tg = null, bd = range;
+    for (const en of enemies) { if (en.hp <= 0) continue; const d = dist(p, en); if (d < bd) { bd = d; tg = en; } }
+    if (tg) {
+      p.aim = Math.atan2(tg.y - p.y, tg.x - p.x);
+      if (p.cool <= 0) {
+        p.cool = 0.45; tg.hp -= dmg;
+        tracers.push({ x1: p.x, y1: p.y, x2: tg.x, y2: tg.y, ttl: 0.08 });
+        if (tg.hp <= 0) { credits += tg.credit; kills++; if (tg.type === 'boss') toast('LCC NEUTRALIZED. PARALLEL ATTACK.', true); }
+      }
+    }
+  }
+  enemies = enemies.filter(en => en.hp > 0);
+  for (const tr of tracers) tr.ttl -= dt; tracers = tracers.filter(tr => tr.ttl > 0);
+  for (const p of pads) if (p.shake) p.shake = Math.max(0, p.shake - dt);
+  for (const x of toasts) x.ttl -= dt; toasts = toasts.filter(x => x.ttl > 0);
+  if (banner) { banner.ttl -= dt; if (banner.ttl <= 0) banner = null; }
+  flashHp = Math.max(0, flashHp - dt);
+
+  if (hp <= 0) die(wave % 5 === 0 && enemies.some(e => e.type === 'boss')
+    ? 'Leadership decapitated by the Land Component Commander. He would like a word about joint operations.'
+    : 'Leadership decapitated on wave ' + wave + '. Warden would like to remind you that you were the system.');
+}
+function die(reason) { if (state !== 'play') return; state = 'dead'; deadAt = t; endReason = reason; }
+
+// ---------- draw ----------
+function txt(s, x, y, size, color, align = 'left') {
+  ctx.font = size + 'px "Press Start 2P", "Courier New", monospace';
+  ctx.fillStyle = color; ctx.textAlign = align; ctx.textBaseline = 'top';
+  ctx.fillText(s, x, y);
+}
+function wrap(s, x, y, size, color, maxW, lh, align = 'center') {
+  ctx.font = size + 'px "Press Start 2P", "Courier New", monospace';
+  let line = '', yy = y;
+  for (const w of s.split(' ')) {
+    const test = line ? line + ' ' + w : w;
+    if (ctx.measureText(test).width > maxW && line) { txt(line, x, yy, size, color, align); line = w; yy += lh; }
+    else line = test;
+  }
+  if (line) txt(line, x, yy, size, color, align);
+  return yy + lh;
+}
+function pill(s, x, y, size, fg, bg) {
+  ctx.font = size + 'px "Press Start 2P", monospace';
+  const w = ctx.measureText(s).width + 8;
+  ctx.fillStyle = bg; ctx.fillRect(x - w / 2, y - 2, w, size + 5);
+  txt(s, x, y, size, fg, 'center');
+}
+function draw() {
+  ctx.fillStyle = '#1b2128'; ctx.fillRect(0, 0, W, H);
+
+  // rings
+  RINGS.slice().reverse().forEach((ring, k) => {
+    const ri = RINGS.length - 1 - k;
+    ctx.beginPath(); ctx.arc(CX, CY, ring.r, 0, Math.PI * 2);
+    ctx.fillStyle = ring.banned ? '#2a2e33' : ri === 0 ? '#3b3f47' : ['#2e3742', '#2a3340', '#262f3b', '#232b36'][ri - 1];
+    ctx.fill();
+    ctx.strokeStyle = ring.banned ? '#6b4a3a' : '#4a5561'; ctx.lineWidth = 1.5; ctx.stroke();
+  });
+  // ring labels
+  RINGS.forEach((ring, ri) => {
+    if (ri === 0) return;
+    pill(ring.name, CX, CY - ring.r - 3 + (ri === 1 ? 6 : 0), 5, ring.banned ? '#c9866b' : '#9aa4ad', '#1b2128');
+  });
+  // leadership core
+  ctx.fillStyle = flashHp > 0 ? '#e04f3f' : '#f2c14e'; ctx.fillRect(CX - 6, CY - 6, 12, 12);
+  ctx.fillStyle = '#1b2128'; ctx.fillRect(CX - 2, CY - 2, 4, 4);
+  txt('LEADERSHIP', CX, CY + 10, 5, '#f2c14e', 'center');
+
+  // pads + turrets
+  for (const p of pads) {
+    const sx = p.shake ? Math.sin(t * 60) * 3 : 0;
+    if (p.banned) { ctx.fillStyle = '#3a3038'; ctx.fillRect(p.x - 5 + sx, p.y - 5, 10, 10); ctx.fillStyle = '#6b4a3a'; ctx.fillRect(p.x - 3 + sx, p.y - 1, 6, 2); continue; }
+    ctx.fillStyle = p.lvl ? '#4a5561' : '#2f3a46'; ctx.fillRect(p.x - 7, p.y - 7, 14, 14);
+    if (!p.lvl) { ctx.fillStyle = '#556270'; ctx.fillRect(p.x - 1, p.y - 4, 2, 8); ctx.fillRect(p.x - 4, p.y - 1, 8, 2); continue; }
+    ctx.fillStyle = '#c8cfd6'; ctx.fillRect(p.x - 5, p.y - 5, 10, 10);
+    ctx.strokeStyle = '#e6e1d3'; ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(p.x, p.y); ctx.lineTo(p.x + Math.cos(p.aim) * 9, p.y + Math.sin(p.aim) * 9); ctx.stroke();
+    ctx.fillStyle = '#f2c14e'; for (let i = 0; i < p.lvl; i++) ctx.fillRect(p.x - 5 + i * 4, p.y + 8, 3, 2);
+  }
+  // tracers
+  ctx.strokeStyle = '#f9f6ec'; ctx.lineWidth = 1;
+  for (const tr of tracers) { ctx.beginPath(); ctx.moveTo(tr.x1, tr.y1); ctx.lineTo(tr.x2, tr.y2); ctx.stroke(); }
+  // enemies
+  for (const en of enemies) {
+    const s = en.size;
+    ctx.fillStyle = en.col;
+    if (en.type === 'fast') { ctx.beginPath(); ctx.moveTo(en.x + Math.cos(en.a + Math.PI) * s, en.y + Math.sin(en.a + Math.PI) * s); ctx.lineTo(en.x + Math.cos(en.a + 2.2) * s, en.y + Math.sin(en.a + 2.2) * s); ctx.lineTo(en.x + Math.cos(en.a - 2.2) * s, en.y + Math.sin(en.a - 2.2) * s); ctx.fill(); }
+    else ctx.fillRect(en.x - s / 2, en.y - s / 2, s, s);
+    if (en.type === 'boss') { ctx.fillStyle = '#f2c14e'; ctx.fillRect(en.x - 2, en.y - 2, 4, 4); }
+    if (en.hp < en.max) { ctx.fillStyle = '#000'; ctx.fillRect(en.x - 7, en.y - s / 2 - 5, 14, 2); ctx.fillStyle = '#7fd08a'; ctx.fillRect(en.x - 7, en.y - s / 2 - 5, 14 * en.hp / en.max, 2); }
+  }
+
+  if (state === 'title') {
+    ctx.fillStyle = 'rgba(35,42,51,.82)'; ctx.fillRect(0, 0, W, H);
+    txt('FIVE RINGS', W / 2, 86, 26, '#f2c14e', 'center');
+    txt('DEFENSE', W / 2, 120, 26, '#f2c14e', 'center');
+    wrap('The enemy attacks from the outside in. Tap a pad to build a turret, tap again to upgrade.', W / 2, 190, 9, '#e6e1d3', 330, 18);
+    wrap('Inner rings hit harder. Warden insists. The outer ring is Fielded Forces, and doctrine prohibits building there. Do not try it. You will try it.', W / 2, 260, 9, '#9aa4ad', 330, 18);
+    wrap('Leadership has 10 HP. Lose it and the system collapses.', W / 2, 372, 9, '#9aa4ad', 330, 18);
+    if (Math.floor(t * 2) % 2 === 0) txt('TAP TO STRIKE THE CENTER', W / 2, 480, 10, '#f2c14e', 'center');
+    return;
+  }
+
+  // HUD
+  ctx.fillStyle = '#232a33'; ctx.fillRect(0, 0, W, TOP);
+  ctx.fillStyle = '#f2c14e'; ctx.fillRect(0, TOP - 3, W, 3);
+  txt('WAVE ' + wave, 10, 12, 9, '#f9f6ec');
+  txt('$' + credits + ' AIRPOWER', W - 10, 12, 9, '#f2c14e', 'right');
+  txt('LEADERSHIP', 10, 34, 7, '#9aa4ad');
+  for (let i = 0; i < 10; i++) { ctx.fillStyle = i < hp ? (hp <= 3 ? '#e04f3f' : '#7fd08a') : 'rgba(255,255,255,.12)'; ctx.fillRect(10 + i * 12, 46, 9, 9); }
+  txt('BUILD $' + buildCost(), W - 10, 34, 7, '#9aa4ad', 'right');
+  if (phase === 'inter') txt('NEXT WAVE ' + Math.ceil(phaseT), W - 10, 46, 7, '#e6e1d3', 'right');
+  else txt('INBOUND ' + (queue.length + enemies.length), W - 10, 46, 7, '#e6e1d3', 'right');
+  toasts.forEach((x, i) => { ctx.globalAlpha = Math.min(1, x.ttl); txt(x.s, 10, 62 + i * 9, 6, x.good ? '#c8f0cc' : '#f7d3cc'); });
+  ctx.globalAlpha = 1;
+
+  if (banner) {
+    ctx.globalAlpha = Math.min(1, banner.ttl / 0.4);
+    ctx.fillStyle = '#f3ead0'; ctx.fillRect(30, H - 92, W - 60, 70);
+    ctx.fillStyle = '#232a33'; ctx.fillRect(30, H - 92, W - 60, 4);
+    txt(banner.text, W / 2, H - 80, 8, '#8a4b2a', 'center');
+    wrap(banner.sub, W / 2, H - 64, 7, '#232a33', W - 100, 12);
+    ctx.globalAlpha = 1;
+  }
+
+  if (state === 'dead') {
+    ctx.fillStyle = 'rgba(35,42,51,.86)'; ctx.fillRect(0, 0, W, H);
+    txt('SYSTEM', W / 2, 96, 26, '#e04f3f', 'center');
+    txt('COLLAPSE', W / 2, 130, 26, '#e04f3f', 'center');
+    let y = wrap(endReason, W / 2, 186, 8, '#e6e1d3', 330, 15);
+    txt('WAVES HELD  ' + (wave - 1), W / 2, y + 22, 10, '#f9f6ec', 'center');
+    txt('KILLS  ' + kills, W / 2, y + 42, 10, '#f9f6ec', 'center');
+    txt('OUTER RING ATTEMPTS  ' + bannedTries, W / 2, y + 62, 8, '#c9866b', 'center');
+    txt('BEST  ' + best, W / 2, y + 82, 10, '#9aa4ad', 'center');
+    txt('POST-MISSION ASSESSMENT', W / 2, y + 122, 8, '#f2c14e', 'center');
+    wrap(grade(wave - 1), W / 2, y + 140, 8, '#e6e1d3', 330, 15);
+    if (t - deadAt > 0.8 && Math.floor(t * 2) % 2 === 0) txt('TAP TO REBUILD THE SYSTEM', W / 2, 520, 9, '#f2c14e', 'center');
+  }
+}
+
+// ---------- loop ----------
+function loop(ts) {
+  const dt = Math.min(0.05, (ts - last) / 1000 || 0); last = ts;
+  update(dt); draw();
+  requestAnimationFrame(loop);
+}
+requestAnimationFrame(loop);
+})();
+</script>
+</body>
+</html>
