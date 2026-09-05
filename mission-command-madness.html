@@ -1,0 +1,324 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Mission Command Madness">
+<meta name="theme-color" content="#232a33">
+<title>Mission Command Madness – Air University Arcade</title>
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+<style>
+  :root{--bg:#232a33;--panel:#2e3742;--text:#e6e1d3;--muted:#9aa4ad;--accent:#f2c14e}
+  *{box-sizing:border-box}
+  html,body{margin:0;background:var(--bg);color:var(--text);font-family:"Press Start 2P","Courier New",monospace}
+  body{min-height:100vh;min-height:100dvh;display:flex;flex-direction:column;align-items:center;
+    padding:max(24px,env(safe-area-inset-top)) 12px max(40px,env(safe-area-inset-bottom));
+    touch-action:manipulation;-webkit-user-select:none;user-select:none;-webkit-tap-highlight-color:transparent;
+    overscroll-behavior:none}
+  header{width:100%;max-width:440px;font-size:9px;color:var(--muted);display:flex;justify-content:space-between;margin-bottom:28px}
+  h1{font-size:18px;line-height:1.5;margin:0 0 10px;color:var(--accent)}
+  .tag{font-size:9px;line-height:2;max-width:420px;margin:0 0 18px}
+  .tag em{font-style:normal;color:var(--muted)}
+  .cab{background:var(--panel);padding:10px;border-radius:6px;box-shadow:0 0 0 4px #14181d,0 0 0 6px #4a5561}
+  canvas{display:block;width:min(400px,calc(100vw - 44px));aspect-ratio:2/3;height:auto;background:#4f6b3a;
+    touch-action:none;cursor:pointer;outline:none;image-rendering:pixelated}
+  canvas:focus-visible{box-shadow:0 0 0 3px var(--accent)}
+  footer{font-size:8px;line-height:1.9;color:var(--muted);max-width:420px;margin-top:26px;text-align:center}
+</style>
+</head>
+<body>
+<header><span>Air University Arcade</span><span>Now playing</span></header>
+<h1>Mission Command Madness</h1>
+<p class="tag">Give intent. Watch your subordinates exercise disciplined initiative.<br>
+<em>Tap a unit to shout "that's not what I meant." Every shout costs trust.</em></p>
+<div class="cab"><canvas id="g" width="400" height="600" tabindex="0"
+  aria-label="Mission Command Madness. Tap a wandering unit to redirect it to the objective."></canvas></div>
+<footer>Empowered execution, until it isn't.<br>Not affiliated with Air University. Obviously.</footer>
+
+<script>
+(() => {
+const W = 400, H = 600, TOP = 96;
+const cv = document.getElementById('g');
+const ctx = cv.getContext('2d');
+function fit() {
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  cv.width = W * dpr; cv.height = H * dpr;
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.imageSmoothingEnabled = false;
+}
+fit(); addEventListener('resize', fit);
+
+// ---------- content ----------
+const OBJ_NAMES = ['ALPHA','BRAVO','CHARLIE','DELTA','ECHO','FOXTROT','GOLF','HOTEL','INDIA','JULIET'];
+const INTENTS = [
+  'Seize OBJ %.',
+  'Seize OBJ % NLT 1400 in order to enable follow-on operations.',
+  'Secure OBJ % while setting conditions for future success.',
+  'Shape the environment in the vicinity of OBJ %.',
+  'Achieve effects consistent with OBJ % and higher\'s vision.',
+  'Leverage all instruments of power to influence OBJ %.',
+  'Be bold. Be agile. OBJ %, probably.',
+  'Synergize.',
+  'See my last email re: OBJ %.',
+  'You know what to do.',
+];
+const DISTRACTORS = ['O-CLUB','CHOW HALL','HILL 210','STAFF MTG','WRONG BRIDGE','POWERPOINT','LIBRARY','THE GYM','SEMINAR','FLIGHTLINE'];
+const IDEAS = ['Initiative!','Exploiting the gap','Intent was unclear','Bias for action','Reading between lines','Commander would want this','I have a better plan','Per the white paper','Bold move','Setting conditions'];
+const NAMES = ['1LT DIAZ','CAPT NGUYEN','MSGT COLE','MAJ PARK','CAPT OKAFOR','1LT BRENNAN','TSGT RUIZ','MAJ SINGH','CAPT MILLER','1LT KOWALSKI','CAPT TANAKA','MAJ HOLT'];
+const GRADES = [
+  [6, 'A. Textbook mission command. Suspiciously so.'],
+  [4, 'B. Trust established. Some shouting noted.'],
+  [2, 'C. You gave intent. Nobody received it.'],
+  [1, 'D. Your intent was a PowerPoint slide.'],
+  [0, 'F. Micromanaged the first wave. Classic.'],
+];
+const SLOTS = [[62,205],[338,225],[70,350],[330,370],[200,320],[110,470],[300,470]];
+const grade = w => GRADES.find(g => w >= g[0])[1];
+const rnd = (a, b) => a + Math.random() * (b - a);
+const pick = a => a[Math.floor(Math.random() * a.length)];
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+const dist = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
+
+// ---------- state ----------
+let state = 'title', t = 0, last = 0, best = 0;
+let wave, intent, obj, spots, units, toSpawn, spawnAt, trust, arrived, lost, total, need,
+    waveStart, banner, toasts, endReason, score, deadAt, shout;
+
+function newWave() {
+  wave++;
+  const name = OBJ_NAMES[(wave - 1) % OBJ_NAMES.length];
+  intent = INTENTS[Math.min(wave - 1, INTENTS.length - 1)].replace('%', name);
+  obj = { x: 200, y: 140, name: 'OBJ ' + name };
+  const n = Math.min(3 + Math.floor(wave / 2), SLOTS.length);
+  const slots = SLOTS.slice().sort(() => Math.random() - 0.5).slice(0, n);
+  const labels = DISTRACTORS.slice().sort(() => Math.random() - 0.5);
+  spots = slots.map((s, i) => ({ x: s[0], y: s[1], label: labels[i] }));
+  units = []; total = Math.min(5 + wave, 10); need = Math.ceil(total * 0.6);
+  toSpawn = total; spawnAt = 0; arrived = 0; lost = 0; waveStart = t;
+  banner = { text: 'WAVE ' + wave + ' — COMMANDER\'S INTENT', ttl: 2.6 };
+}
+function reset() {
+  wave = 0; trust = 100; toasts = []; score = 0; shout = null; t = 0; endReason = '';
+  newWave();
+}
+reset();
+
+function spawnUnit() {
+  units.push({
+    x: 200 + rnd(-70, 70), y: 585, a: -Math.PI / 2, name: pick(NAMES),
+    st: 'follow', target: null, until: 0, nextIdea: t + rnd(1.2, 3), bubble: null, phase: rnd(0, 6.28),
+  });
+}
+
+// ---------- input ----------
+function canvasPoint(e) {
+  const r = cv.getBoundingClientRect();
+  return { x: (e.clientX - r.left) * W / r.width, y: (e.clientY - r.top) * H / r.height };
+}
+function press(e) {
+  e.preventDefault(); cv.focus();
+  if (state === 'title') { state = 'play'; reset(); return; }
+  if (state === 'dead') { if (t - deadAt > 0.8) { state = 'play'; reset(); } return; }
+  const p = canvasPoint(e);
+  let bestU = null, bd = 34;
+  for (const u of units) { const d = dist(u, p); if (d < bd) { bd = d; bestU = u; } }
+  if (!bestU) return;
+  if (bestU.st === 'redirect') return;
+  const compliant = bestU.st === 'follow';
+  trust -= compliant ? 18 : 12;
+  bestU.st = 'redirect'; bestU.until = t + 3; bestU.target = obj;
+  bestU.bubble = { s: compliant ? '...I was, sir' : 'Yes sir.', ttl: 1.6 };
+  bestU.nextIdea = t + 6.5;
+  shout = { x: bestU.x, y: bestU.y, ttl: 1.2 };
+  if (trust <= 0) die('Relieved for cause: micromanagement. Your subordinates have filed an IG complaint.');
+}
+cv.addEventListener('pointerdown', press);
+addEventListener('keydown', e => { if ((e.code === 'Space' || e.code === 'Enter') && state !== 'play') { e.preventDefault(); press(e); } });
+
+// ---------- update ----------
+function update(dt) {
+  t += dt;
+  if (state !== 'play') { if (state === 'dead') return; return; }
+
+  trust = Math.min(100, trust + 4 * dt);
+  if (toSpawn > 0 && t >= spawnAt) { spawnUnit(); toSpawn--; spawnAt = t + 0.7; }
+
+  const pIdea = clamp(0.3 + wave * 0.07, 0, 0.85);
+  const wobble = 0.8 + wave * 0.15;
+
+  for (const u of units) {
+    if (u.st === 'done') continue;
+    // ideas
+    if (u.st === 'follow' && t > u.nextIdea) {
+      u.nextIdea = t + rnd(1.5, 3.2);
+      if (Math.random() < pIdea) {
+        u.st = 'idea'; u.target = pick(spots); u.until = t + rnd(2.5, 5);
+        u.bubble = { s: pick(IDEAS), ttl: 1.8 };
+      }
+    }
+    if (u.st === 'idea' && t > u.until) {
+      if (Math.random() < 0.4) { u.st = 'follow'; u.bubble = { s: 'never mind', ttl: 1.2 }; u.nextIdea = t + 2.5; }
+      else u.until = t + 3;
+    }
+    if (u.st === 'redirect' && t > u.until) u.st = 'follow';
+
+    // steer
+    const tgt = u.st === 'idea' ? u.target : obj;
+    const want = Math.atan2(tgt.y - u.y, tgt.x - u.x);
+    let da = want - u.a; while (da > Math.PI) da -= 2 * Math.PI; while (da < -Math.PI) da += 2 * Math.PI;
+    const turn = u.st === 'redirect' ? 8 : 3;
+    u.a += clamp(da, -turn * dt, turn * dt);
+    if (u.st !== 'redirect') u.a += Math.sin(t * 2.3 + u.phase) * wobble * dt;
+    const sp = u.st === 'redirect' ? 78 : 46;
+    u.x = clamp(u.x + Math.cos(u.a) * sp * dt, 12, W - 12);
+    u.y = clamp(u.y + Math.sin(u.a) * sp * dt, TOP + 8, H - 12);
+
+    // outcomes
+    if (dist(u, obj) < 26) { u.st = 'done'; arrived++; score++; toasts.push({ s: u.name + ' ON OBJ', ttl: 1.6, good: true }); }
+    for (const s of spots) if (u.st !== 'done' && dist(u, s) < 22) {
+      u.st = 'done'; lost++; toasts.push({ s: u.name + ': ' + s.label, ttl: 2, good: false });
+    }
+    if (u.bubble) { u.bubble.ttl -= dt; if (u.bubble.ttl <= 0) u.bubble = null; }
+  }
+
+  // wave resolution
+  const active = units.filter(u => u.st !== 'done').length;
+  if (toSpawn === 0 && (active === 0 || t - waveStart > 45)) {
+    if (t - waveStart > 45 && active) { lost += active; toasts.push({ s: active + ' STILL DELIBERATING', ttl: 2, good: false }); units.forEach(u => u.st = 'done'); }
+    if (arrived >= need) { best = Math.max(best, wave); newWave(); }
+    else die('Only ' + arrived + ' of ' + total + ' reached ' + obj.name + '. The rest are exercising initiative.');
+  }
+
+  for (const x of toasts) x.ttl -= dt; toasts = toasts.filter(x => x.ttl > 0).slice(-4);
+  if (banner) { banner.ttl -= dt; if (banner.ttl <= 0) banner = null; }
+  if (shout) { shout.ttl -= dt; if (shout.ttl <= 0) shout = null; }
+}
+function die(reason) {
+  if (state !== 'play') return;
+  state = 'dead'; deadAt = t; endReason = reason; best = Math.max(best, wave - 1);
+}
+
+// ---------- draw ----------
+function txt(s, x, y, size, color, align = 'left') {
+  ctx.font = size + 'px "Press Start 2P", "Courier New", monospace';
+  ctx.fillStyle = color; ctx.textAlign = align; ctx.textBaseline = 'top';
+  ctx.fillText(s, x, y);
+}
+function wrap(s, x, y, size, color, maxW, lh, align = 'center') {
+  ctx.font = size + 'px "Press Start 2P", "Courier New", monospace';
+  let line = '', yy = y;
+  for (const w of s.split(' ')) {
+    const test = line ? line + ' ' + w : w;
+    if (ctx.measureText(test).width > maxW && line) { txt(line, x, yy, size, color, align); line = w; yy += lh; }
+    else line = test;
+  }
+  if (line) txt(line, x, yy, size, color, align);
+  return yy + lh;
+}
+function drawUnit(u) {
+  const col = u.st === 'idea' ? '#e0b04a' : u.st === 'redirect' ? '#f2f2f2' : '#3b3f47';
+  const dx = Math.cos(u.a), dy = Math.sin(u.a);
+  ctx.fillStyle = col;
+  ctx.fillRect(u.x - 5, u.y - 5, 10, 10);
+  ctx.fillRect(u.x - 10 - dx * 4, u.y + 2 - dy * 4, 6, 6);
+  ctx.fillRect(u.x + 4 - dx * 4, u.y + 2 - dy * 4, 6, 6);
+  ctx.fillStyle = '#c9a97c'; ctx.fillRect(u.x - 2, u.y - 8, 4, 3);
+  ctx.fillStyle = '#e04f3f'; ctx.fillRect(u.x + dx * 8 - 1, u.y + dy * 8 - 1, 3, 3);
+  if (u.bubble) {
+    ctx.font = '6px "Press Start 2P", monospace';
+    const w = ctx.measureText(u.bubble.s).width + 8;
+    const bx = clamp(u.x - w / 2, 2, W - w - 2), by = u.y - 26;
+    ctx.fillStyle = '#f3ead0'; ctx.fillRect(bx, by, w, 12);
+    ctx.fillRect(u.x - 2, by + 12, 4, 3);
+    txt(u.bubble.s, bx + 4, by + 3, 6, '#232a33');
+  }
+}
+function draw() {
+  // field
+  ctx.fillStyle = '#4f6b3a'; ctx.fillRect(0, 0, W, H);
+  ctx.fillStyle = '#4a6536';
+  for (let y = TOP; y < H; y += 24) for (let x = (y / 24 % 2) * 12; x < W; x += 24) ctx.fillRect(x, y, 12, 12);
+  ctx.fillStyle = '#5c7645'; ctx.fillRect(0, H - 22, W, 22);
+  txt('LINE OF DEPARTURE', 8, H - 14, 6, '#8fa87c');
+
+  if (state === 'play' || state === 'dead') {
+    // distractors
+    for (const s of spots) {
+      ctx.fillStyle = '#7a5a3a'; ctx.fillRect(s.x - 16, s.y - 12, 32, 22);
+      ctx.fillStyle = '#5b3a29'; ctx.fillRect(s.x - 18, s.y - 16, 36, 6);
+      ctx.fillStyle = '#f2c14e'; ctx.fillRect(s.x - 4, s.y - 2, 8, 10);
+      txt(s.label, s.x, s.y + 14, 6, '#e6e1d3', 'center');
+    }
+    // objective
+    ctx.fillStyle = 'rgba(242,193,78,.18)'; ctx.beginPath(); ctx.arc(obj.x, obj.y, 26, 0, 6.29); ctx.fill();
+    ctx.fillStyle = '#e6e1d3'; ctx.fillRect(obj.x - 1, obj.y - 24, 3, 30);
+    ctx.fillStyle = '#e04f3f'; ctx.fillRect(obj.x + 2, obj.y - 24, 18, 12);
+    txt(obj.name, obj.x, obj.y + 12, 7, '#f9f6ec', 'center');
+
+    for (const u of units) if (u.st !== 'done') drawUnit(u);
+    if (shout) {
+      const a = Math.min(1, shout.ttl);
+      ctx.globalAlpha = a; txt('NOT WHAT I MEANT!', clamp(shout.x, 70, W - 70), shout.y - 44, 8, '#f9f6ec', 'center'); ctx.globalAlpha = 1;
+    }
+
+    // HUD
+    ctx.fillStyle = '#232a33'; ctx.fillRect(0, 0, W, TOP);
+    ctx.fillStyle = '#f2c14e'; ctx.fillRect(0, TOP - 3, W, 3);
+    txt('INTENT', 10, 10, 7, '#9aa4ad');
+    wrap(intent, 10, 22, 7, '#e6e1d3', W - 20, 12, 'left');
+    txt('WAVE ' + wave, 10, 60, 8, '#f9f6ec');
+    txt('ON OBJ ' + arrived + '/' + need, 110, 60, 8, arrived >= need ? '#7fd08a' : '#f9f6ec');
+    const low = trust < 30;
+    txt(low ? 'MICROMANAGING' : 'TRUST', W - 10, 60, 7, low ? '#e04f3f' : '#9aa4ad', 'right');
+    ctx.fillStyle = 'rgba(255,255,255,.12)'; ctx.fillRect(W - 130, 72, 120, 10);
+    ctx.fillStyle = low ? '#e04f3f' : '#7fd08a'; ctx.fillRect(W - 130, 72, 120 * clamp(trust, 0, 100) / 100, 10);
+    // toasts
+    toasts.forEach((x, i) => { ctx.globalAlpha = Math.min(1, x.ttl); txt(x.s, 10, TOP + 8 + i * 12, 6, x.good ? '#c8f0cc' : '#f7d3cc'); });
+    ctx.globalAlpha = 1;
+    if (banner) {
+      ctx.globalAlpha = Math.min(1, banner.ttl / 0.4);
+      ctx.fillStyle = '#f3ead0'; ctx.fillRect(30, 250, W - 60, 74);
+      ctx.fillStyle = '#232a33'; ctx.fillRect(30, 250, W - 60, 4);
+      txt(banner.text, W / 2, 264, 8, '#8a4b2a', 'center');
+      wrap(intent, W / 2, 282, 7, '#232a33', W - 100, 12);
+      ctx.globalAlpha = 1;
+    }
+  }
+
+  if (state === 'title') {
+    ctx.fillStyle = 'rgba(35,42,51,.8)'; ctx.fillRect(0, 0, W, H);
+    txt('MISSION', W / 2, 80, 26, '#f2c14e', 'center');
+    txt('COMMAND', W / 2, 114, 26, '#f2c14e', 'center');
+    txt('MADNESS', W / 2, 148, 26, '#f2c14e', 'center');
+    wrap('You give the intent. Your units walk to the objective. Mostly.', W / 2, 210, 9, '#e6e1d3', 330, 18);
+    wrap('When one wanders off to the O-Club, tap it to shout THAT\'S NOT WHAT I MEANT. Every shout costs trust. Run out and you are relieved.', W / 2, 262, 9, '#9aa4ad', 330, 18);
+    wrap('Get 60% of each wave onto the objective. Your intent gets vaguer every wave. So do they.', W / 2, 372, 9, '#9aa4ad', 330, 18);
+    if (Math.floor(t * 2) % 2 === 0) txt('TAP TO ISSUE INTENT', W / 2, 480, 11, '#f2c14e', 'center');
+  }
+  if (state === 'dead') {
+    ctx.fillStyle = 'rgba(35,42,51,.84)'; ctx.fillRect(0, 0, W, H);
+    txt('MISSION', W / 2, 96, 26, '#e04f3f', 'center');
+    txt('FAILED', W / 2, 130, 26, '#e04f3f', 'center');
+    let y = wrap(endReason, W / 2, 186, 8, '#e6e1d3', 330, 15);
+    txt('WAVES CLEARED  ' + (wave - 1), W / 2, y + 22, 10, '#f9f6ec', 'center');
+    txt('UNITS ON OBJ  ' + score, W / 2, y + 42, 10, '#f9f6ec', 'center');
+    txt('BEST  ' + best, W / 2, y + 62, 10, '#9aa4ad', 'center');
+    txt('POST-MISSION ASSESSMENT', W / 2, y + 104, 8, '#f2c14e', 'center');
+    wrap(grade(wave - 1), W / 2, y + 122, 8, '#e6e1d3', 330, 15);
+    if (t - deadAt > 0.8 && Math.floor(t * 2) % 2 === 0) txt('TAP TO REISSUE INTENT', W / 2, 510, 10, '#f2c14e', 'center');
+  }
+}
+
+// ---------- loop ----------
+function loop(ts) {
+  const dt = Math.min(0.05, (ts - last) / 1000 || 0); last = ts;
+  update(dt); draw();
+  requestAnimationFrame(loop);
+}
+requestAnimationFrame(loop);
+})();
+</script>
+</body>
+</html>
