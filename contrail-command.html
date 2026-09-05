@@ -1,0 +1,474 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Contrail Command">
+<meta name="theme-color" content="#232a33">
+<title>Contrail Command – Bingo Fuel Arcade</title>
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+<style>
+  :root{--bg:#232a33;--panel:#2e3742;--text:#e6e1d3;--muted:#9aa4ad;--accent:#f2c14e}
+  *{box-sizing:border-box}
+  html,body{margin:0;background:var(--bg);color:var(--text);font-family:"Press Start 2P","Courier New",monospace}
+  body{min-height:100vh;min-height:100dvh;display:flex;flex-direction:column;align-items:center;
+    padding:max(24px,env(safe-area-inset-top)) 12px max(40px,env(safe-area-inset-bottom));
+    touch-action:manipulation;-webkit-user-select:none;user-select:none;-webkit-tap-highlight-color:transparent;
+    overscroll-behavior:none}
+  header{width:100%;max-width:440px;font-size:9px;color:var(--muted);display:flex;justify-content:space-between;margin-bottom:28px}
+  h1{font-size:18px;line-height:1.5;margin:0 0 10px;color:var(--accent)}
+  .tag{font-size:9px;line-height:2;max-width:420px;margin:0 0 18px}
+  .tag em{font-style:normal;color:var(--muted)}
+  .cab{background:var(--panel);padding:10px;border-radius:6px;box-shadow:0 0 0 4px #14181d,0 0 0 6px #4a5561}
+  canvas{display:block;width:min(400px,calc(100vw - 44px));aspect-ratio:2/3;height:auto;background:#060906;
+    touch-action:none;cursor:pointer;outline:none;image-rendering:pixelated}
+  canvas:focus-visible{box-shadow:0 0 0 3px var(--accent)}
+  footer{font-size:8px;line-height:1.9;color:var(--muted);max-width:420px;margin-top:26px;text-align:center}
+</style>
+</head>
+<body>
+<header><span>Bingo Fuel Arcade</span><span>Now playing</span></header>
+<h1>Contrail Command</h1>
+<p class="tag">Draw shapes over the AOR with your contrail. Loops combine. Score when it's done.<br>
+<em>Points for complexity. You know which shape scores the most.</em></p>
+<div class="cab"><canvas id="g" width="400" height="600" tabindex="0"
+  aria-label="Contrail Command. Hold the left or right side of the screen to turn. Close a loop with your trail to score the shape."></canvas></div>
+<footer>Okanogan County, 2017. Never forget.<br>Not affiliated with Air University, CENTCOM, or the Navy. Obviously.</footer>
+
+<script>
+(() => {
+const W = 400, H = 600, CX = 200, CY = 335, R = 186;
+const cv = document.getElementById('g');
+const ctx = cv.getContext('2d');
+function fit() {
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  cv.width = W * dpr; cv.height = H * dpr;
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+}
+fit(); addEventListener('resize', fit);
+
+// ---------- map ----------
+const MAP = {"AFG":[[[61.21,35.65],[62.23,35.27],[62.98,35.4],[63.19,35.86],[64.55,36.31],[64.75,37.11],[65.59,37.31],[65.75,37.66],[68.14,37.02],[68.86,37.34],[69.2,37.15],[69.52,37.61],[70.12,37.59],[70.81,38.49],[71.35,38.26],[71.45,37.07],[71.84,36.74],[73.26,37.5],[74.98,37.42],[75.16,37.13],[71.85,36.51],[71.26,36.07],[71.61,35.15],[71.12,34.73],[70.88,33.99],[69.93,34.02],[70.32,33.36],[69.69,33.11],[69.26,32.5],[69.32,31.9],[68.93,31.62],[67.79,31.58],[67.68,31.3],[66.94,31.3],[66.38,30.74],[66.35,29.89],[64.15,29.34],[62.55,29.32],[60.87,29.83],[61.78,30.74],[61.7,31.38],[60.94,31.55],[60.54,32.98],[60.96,33.53],[60.53,33.68],[61.21,35.65]]],"ARE":[[[51.58,24.25],[51.79,24.02],[54.01,24.12],[56.07,26.06],[56.26,25.71],[56.4,24.92],[55.89,24.92],[55.98,24.13],[55.53,23.93],[55.01,22.5],[52.0,23.0],[51.58,24.25]]],"ARM":[[[43.58,41.09],[44.97,41.25],[45.56,40.81],[45.36,40.56],[45.89,40.22],[45.61,39.9],[46.48,39.46],[46.51,38.77],[46.14,38.74],[45.74,39.47],[43.66,40.25],[43.58,41.09]]],"AZE":[[[45.0,39.74],[45.74,39.47],[46.14,38.74],[45.46,38.87],[44.95,39.34],[44.79,39.71],[45.0,39.74]],[[47.37,41.22],[47.82,41.15],[48.58,41.81],[49.62,40.57],[50.39,40.26],[49.57,40.18],[49.22,39.05],[48.86,38.82],[48.88,38.32],[48.01,38.79],[48.36,39.29],[48.06,39.58],[46.51,38.77],[46.48,39.46],[45.61,39.9],[45.89,40.22],[44.97,41.25],[45.22,41.41],[46.5,41.06],[46.15,41.72],[46.4,41.86],[47.37,41.22]]],"IRN":[[[53.92,37.2],[54.8,37.39],[55.51,37.96],[56.18,37.94],[56.62,38.12],[57.33,38.03],[58.44,37.52],[59.23,37.41],[60.38,36.53],[61.12,36.49],[61.21,35.65],[60.53,33.68],[60.96,33.53],[60.54,32.98],[60.86,32.18],[60.94,31.55],[61.7,31.38],[61.78,30.74],[60.87,29.83],[61.77,28.7],[62.73,28.26],[62.76,27.38],[63.23,27.22],[63.32,26.76],[61.87,26.24],[61.5,25.08],[57.4,25.74],[56.97,26.97],[56.49,27.14],[55.72,26.96],[54.72,26.48],[53.49,26.81],[52.48,27.58],[51.52,27.87],[50.12,30.15],[49.58,29.99],[48.94,30.32],[48.57,29.93],[48.01,30.45],[48.0,30.99],[47.69,30.98],[47.85,31.71],[47.33,32.47],[46.11,33.02],[45.42,33.97],[45.65,34.75],[46.15,35.09],[46.08,35.68],[45.42,35.98],[44.23,37.97],[44.42,38.28],[44.11,39.43],[44.79,39.71],[44.95,39.34],[45.46,38.87],[46.14,38.74],[46.51,38.77],[47.69,39.51],[48.06,39.58],[48.36,39.29],[48.01,38.79],[48.63,38.27],[48.88,38.32],[49.2,37.58],[50.15,37.37],[50.84,36.87],[52.26,36.7],[53.83,36.97],[53.92,37.2]]],"IRQ":[[[45.42,35.98],[46.08,35.68],[46.15,35.09],[45.65,34.75],[45.42,33.97],[46.11,33.02],[47.33,32.47],[47.85,31.71],[47.69,30.98],[48.0,30.99],[48.01,30.45],[48.57,29.93],[47.3,30.06],[46.57,29.1],[44.71,29.18],[41.89,31.19],[40.4,31.89],[39.2,32.16],[38.79,33.38],[41.01,34.42],[41.38,35.63],[41.29,36.36],[41.84,36.61],[42.35,37.23],[42.78,37.39],[43.94,37.26],[44.29,37.0],[44.77,37.17],[45.42,35.98]]],"JOR":[[[35.55,32.39],[35.72,32.71],[36.83,32.31],[38.79,33.38],[39.2,32.16],[37.0,31.51],[38.0,30.51],[36.07,29.2],[34.92,29.5],[35.55,32.39]]],"KWT":[[[47.97,29.98],[48.18,29.53],[48.09,29.31],[48.42,28.55],[47.71,28.53],[47.46,29.0],[46.57,29.1],[47.3,30.06],[47.97,29.98]]],"OMN":[[[58.86,21.11],[58.49,20.43],[57.83,20.24],[57.69,18.94],[56.61,18.57],[56.28,17.88],[55.66,17.88],[54.79,16.95],[54.24,17.04],[53.11,16.65],[52.0,19.0],[55.0,20.0],[55.67,22.0],[55.23,23.11],[55.53,23.93],[55.98,24.13],[55.89,24.92],[56.4,24.92],[57.4,23.88],[58.73,23.57],[59.81,22.53],[58.86,21.11]],[[56.39,25.9],[56.26,25.71],[56.07,26.06],[56.36,26.4],[56.39,25.9]]],"PAK":[[[75.16,37.13],[75.9,36.67],[76.19,35.9],[77.84,35.49],[76.87,34.65],[75.76,34.5],[74.24,34.75],[73.75,34.32],[74.45,32.76],[75.26,32.27],[74.41,31.69],[74.42,30.98],[71.78,27.91],[70.62,27.99],[69.51,26.94],[70.17,26.49],[70.28,25.72],[70.84,25.22],[71.04,24.36],[68.84,24.36],[68.18,23.69],[67.44,23.94],[66.37,25.43],[61.5,25.08],[61.87,26.24],[63.32,26.76],[63.23,27.22],[62.76,27.38],[62.73,28.26],[61.77,28.7],[60.87,29.83],[62.55,29.32],[65.05,29.47],[66.35,29.89],[66.38,30.74],[66.94,31.3],[67.68,31.3],[67.79,31.58],[68.93,31.62],[69.32,31.9],[69.26,32.5],[69.69,33.11],[70.32,33.36],[69.93,34.02],[70.88,33.99],[71.12,34.73],[71.61,35.15],[71.26,36.07],[71.85,36.51],[75.16,37.13]]],"QAT":[[[50.81,24.75],[50.74,25.48],[51.29,26.11],[51.61,25.22],[51.39,24.63],[50.81,24.75]]],"SAU":[[[42.78,16.35],[40.94,19.49],[39.8,20.34],[39.14,21.29],[39.07,22.58],[38.49,23.69],[37.48,24.29],[36.93,25.6],[35.13,28.06],[34.63,28.06],[34.96,29.36],[36.07,29.2],[38.0,30.51],[37.0,31.51],[39.2,32.16],[40.4,31.89],[41.89,31.19],[44.71,29.18],[47.46,29.0],[47.71,28.53],[48.42,28.55],[48.81,27.69],[50.15,26.69],[50.24,25.61],[50.81,24.75],[51.39,24.63],[52.0,23.0],[55.01,22.5],[55.21,22.71],[55.67,22.0],[55.0,20.0],[52.0,19.0],[49.12,18.62],[48.18,18.17],[47.47,17.12],[47.0,16.95],[46.75,17.28],[43.79,17.32],[43.38,17.58],[43.22,16.67],[42.78,16.35]]],"SYR":[[[38.79,33.38],[36.83,32.31],[35.7,32.72],[36.07,33.82],[36.61,34.2],[36.45,34.59],[36.0,34.64],[35.91,35.41],[36.69,36.26],[36.74,36.82],[37.07,36.62],[38.17,36.9],[39.52,36.72],[42.35,37.23],[41.29,36.36],[41.38,35.63],[41.01,34.42],[38.79,33.38]]],"TKM":[[[61.21,35.65],[61.12,36.49],[60.38,36.53],[59.23,37.41],[57.33,38.03],[55.51,37.96],[54.8,37.39],[53.92,37.2],[53.88,38.95],[53.1,39.29],[53.36,39.98],[52.69,40.03],[52.92,40.88],[53.86,40.63],[54.74,40.95],[53.72,42.12],[52.92,41.87],[52.81,41.14],[52.5,41.78],[54.08,42.32],[54.76,42.04],[55.46,41.26],[57.1,41.32],[56.93,41.83],[58.63,42.75],[59.98,42.22],[60.08,41.43],[60.47,41.22],[61.88,41.08],[62.37,40.05],[64.17,38.89],[66.55,37.97],[66.52,37.36],[65.75,37.66],[65.59,37.31],[64.75,37.11],[64.55,36.31],[63.19,35.86],[62.98,35.4],[62.23,35.27],[61.21,35.65]]],"TUR":[[[36.91,41.34],[38.35,40.95],[40.37,41.01],[41.55,41.54],[42.62,41.58],[43.58,41.09],[43.66,40.25],[44.79,39.71],[44.11,39.43],[44.42,38.28],[44.23,37.97],[44.77,37.17],[44.29,37.0],[42.78,37.39],[39.52,36.72],[38.17,36.9],[37.07,36.62],[36.74,36.82],[36.69,36.26],[36.15,35.82],[35.78,36.27],[36.16,36.65],[34.71,36.8],[34.03,36.22],[32.51,36.11],[31.7,36.64],[30.62,36.68],[30.39,36.26],[29.7,36.14],[28.73,36.68],[27.64,36.66],[27.05,37.65],[26.32,38.21],[26.8,38.99],[26.17,39.46],[27.28,40.42],[28.82,40.46],[29.24,41.22],[31.15,41.09],[33.51,42.02],[35.17,42.04],[36.91,41.34]]]};
+const KLON = 14.2, KLAT = KLON / 0.85, LON0 = 51.2, LAT0 = 32.2;
+const px = (lon, lat) => ({ x: CX + (lon - LON0) * KLON, y: CY - (lat - LAT0) * KLAT });
+const CITIES = [['BAGHDAD',44.36,33.31],['TEHRAN',51.39,35.69],['BASRA',47.78,30.51],['ISFAHAN',51.67,32.65],['MOSUL',43.13,36.34],['SHIRAZ',52.53,29.59],['TABRIZ',46.29,38.08],['MASHHAD',59.6,36.3],['BANDAR ABBAS',56.28,27.18],['KUWAIT',47.98,29.37]];
+const SAMS = [[51.39,35.69],[51.67,32.65],[56.28,27.18],[46.29,38.08]].map(([lo,la], i) => ({ ...px(lo, la), r: 24, phase: i * 1.6, on: false }));
+const AWACS = px(48.6, 28.4), BASE = px(51.31, 25.12);
+const GREEN = '#39ff6a';
+const OS = 0.5, OW = Math.round(W * OS), OH = Math.round(H * OS);
+const oc = document.createElement('canvas'); oc.width = OW; oc.height = OH; const octx = oc.getContext('2d', { willReadFrequently: true });
+
+// ---------- shape scoring ----------
+function resample(poly, N) {
+  const cum = [0];
+  for (let i = 1; i < poly.length; i++) cum.push(cum[i - 1] + Math.hypot(poly[i].x - poly[i - 1].x, poly[i].y - poly[i - 1].y));
+  const L = cum[cum.length - 1], out = [];
+  if (L === 0) return null;
+  let j = 0;
+  for (let k = 0; k < N; k++) {
+    const d = (k / N) * L;
+    while (j < cum.length - 2 && cum[j + 1] < d) j++;
+    const f = (d - cum[j]) / ((cum[j + 1] - cum[j]) || 1);
+    out.push({ x: poly[j].x + (poly[j + 1].x - poly[j].x) * f, y: poly[j].y + (poly[j + 1].y - poly[j].y) * f, i: k });
+  }
+  return out;
+}
+function signedArea(p) { let a = 0; for (let i = 0; i < p.length; i++) { const q = p[(i + 1) % p.length]; a += p[i].x * q.y - q.x * p[i].y; } return a / 2; }
+function hullOf(pts) {
+  const s = pts.slice().sort((a, b) => a.x - b.x || a.y - b.y);
+  const cross = (o, a, b) => (a.x - o.x) * (b.y - o.y) - (a.y - o.y) * (b.x - o.x);
+  const lo = [], up = [];
+  for (const p of s) { while (lo.length >= 2 && cross(lo[lo.length - 2], lo[lo.length - 1], p) <= 0) lo.pop(); lo.push(p); }
+  for (let i = s.length - 1; i >= 0; i--) { const p = s[i]; while (up.length >= 2 && cross(up[up.length - 2], up[up.length - 1], p) <= 0) up.pop(); up.push(p); }
+  return lo.slice(0, -1).concat(up.slice(0, -1));
+}
+function scoreShape(poly) {
+  const N = 80;
+  let r = resample(poly, N); if (!r) return null;
+  const xs = r.map(p => p.x), ys = r.map(p => p.y);
+  const size = Math.max(Math.max(...xs) - Math.min(...xs), Math.max(...ys) - Math.min(...ys));
+  if (size < 34) return { small: true };
+  if (signedArea(r) < 0) { r.reverse(); r.forEach((p, i) => p.i = i); }
+  // PCA axis
+  const mx = xs.reduce((a, b) => a + b) / N, my = ys.reduce((a, b) => a + b) / N;
+  let sxx = 0, sxy = 0, syy = 0;
+  for (const p of r) { const dx = p.x - mx, dy = p.y - my; sxx += dx * dx; sxy += dx * dy; syy += dy * dy; }
+  const ang = 0.5 * Math.atan2(2 * sxy, sxx - syy), ux = Math.cos(ang), uy = Math.sin(ang);
+  for (const p of r) { p.s = (p.x - mx) * ux + (p.y - my) * uy; p.w = -(p.x - mx) * uy + (p.y - my) * ux; }
+  const smin = Math.min(...r.map(p => p.s)), smax = Math.max(...r.map(p => p.s)), L = smax - smin || 1;
+  for (const p of r) p.u = (p.s - smin) / L;
+  // width profile
+  const B = 10, wmin = Array(B).fill(Infinity), wmax = Array(B).fill(-Infinity);
+  for (const p of r) { const b = Math.min(B - 1, Math.floor(p.u * B)); wmin[b] = Math.min(wmin[b], p.w); wmax[b] = Math.max(wmax[b], p.w); }
+  let width = wmax.map((v, i) => (isFinite(v) && isFinite(wmin[i])) ? v - wmin[i] : 0);
+  for (let i = 0; i < B; i++) if (!width[i]) width[i] = width[i - 1] || width[i + 1] || 0;
+  const maxW = Math.max(...width);
+  const aspect = L / (maxW || 1);
+  // convexity defects
+  const hull = hullOf(r), defects = [];
+  for (let h = 0; h < hull.length; h++) {
+    const a = hull[h], b = hull[(h + 1) % hull.length];
+    const dx = b.x - a.x, dy = b.y - a.y, len = Math.hypot(dx, dy) || 1;
+    let md = 0, mp = null;
+    for (let j = (a.i + 1) % N; j !== b.i; j = (j + 1) % N) {
+      const p = r[j], d = Math.abs(dy * p.x - dx * p.y + b.x * a.y - b.y * a.x) / len;
+      if (d > md) { md = d; mp = p; }
+    }
+    if (mp && md > 0.05 * size) defects.push({ depth: md, u: mp.u });
+  }
+  // corners: local maxima of turning angle
+  const turns = r.map((p, i) => {
+    const a = r[(i - 4 + N) % N], b = r[(i + 4) % N];
+    const a1 = Math.atan2(p.y - a.y, p.x - a.x), a2 = Math.atan2(b.y - p.y, b.x - p.x);
+    let d = Math.abs(a2 - a1); if (d > Math.PI) d = 2 * Math.PI - d; return d;
+  });
+  let corners = 0;
+  for (let i = 0; i < N; i++) {
+    if (turns[i] < 0.6) continue;
+    let mx = true; for (let k = -4; k <= 4; k++) if (k && turns[(i + k + N) % N] > turns[i]) mx = false;
+    if (mx) corners++;
+  }
+  // orient: base = wider end
+  let base = (width[0] + width[1]) / 2, tip = (width[8] + width[9]) / 2, flipped = false;
+  if (tip > base) { flipped = true; [base, tip] = [tip, base]; width.reverse(); }
+  const shaftArr = width.slice(3, 8).sort((a, b) => a - b), shaft = shaftArr[2];
+  const ratio = base / (shaft || 1);
+  const du = defects.map(d => flipped ? 1 - d.u : d.u);
+  const baseNotch = du.filter(u => u < 0.16).length, crotch = du.filter(u => u >= 0.1 && u < 0.45).length;
+  const baseDefects = du.filter(u => u < 0.45).length;
+  const dick = aspect >= 1.15 && aspect <= 4.5 && ratio >= 1.35 && crotch >= 2 && defects.length <= 6;
+  let label, pts;
+  const k = defects.length;
+  if (dick) { label = 'SKY PENIS'; pts = baseNotch ? 120 : 100; }
+  else if (k === 0) {
+    if (corners <= 1) { label = aspect < 1.35 ? 'CIRCLE, ROUGHLY' : 'OVAL'; pts = aspect < 1.35 ? 10 : 12; }
+    else if (corners === 2) { label = 'LENS'; pts = 15; }
+    else if (corners === 3) { label = 'TRIANGLE'; pts = 20; }
+    else if (corners === 4) { label = 'QUADRILATERAL'; pts = 25; }
+    else if (corners === 5) { label = 'PENTAGON'; pts = 30; }
+    else { label = 'POLYGON, ALLEGEDLY'; pts = 32; }
+  }
+  else if (k === 1) { label = corners >= 4 ? 'HEART' : aspect > 1.6 ? 'BANANA' : 'KIDNEY'; pts = corners >= 4 ? 30 : 22 + corners; }
+  else if (k === 2) { label = 'PEANUT'; pts = 35; }
+  else { label = k >= 5 ? 'STAR' : 'BLOB WITH AMBITION'; pts = Math.min(75, 45 + (k - 3) * 6); }
+  pts += Math.round(size / 45);
+  return { label, pts, corners, defects: k, aspect: +aspect.toFixed(2), ratio: +ratio.toFixed(2), baseDefects, size: Math.round(size) };
+}
+
+// ---------- raster silhouette of the whole drawing ----------
+// grid: Uint8Array(ow*oh), 1 = ink. Returns { open:true } or { contour:[{x,y}...] } in grid coords.
+function silhouette(grid, ow, oh) {
+  const out = new Uint8Array(ow * oh), stack = [];
+  const push = i => { if (!out[i] && !grid[i]) { out[i] = 1; stack.push(i); } };
+  for (let x = 0; x < ow; x++) { push(x); push((oh - 1) * ow + x); }
+  for (let y = 0; y < oh; y++) { push(y * ow); push(y * ow + ow - 1); }
+  while (stack.length) {
+    const i = stack.pop(), x = i % ow, y = (i - x) / ow;
+    if (x > 0) push(i - 1); if (x < ow - 1) push(i + 1); if (y > 0) push(i - ow); if (y < oh - 1) push(i + ow);
+  }
+  let enclosed = 0, start = -1;
+  for (let i = 0; i < ow * oh; i++) { if (!out[i]) { if (!grid[i]) enclosed++; if (start < 0) start = i; } }
+  if (enclosed < 25) return { open: true };
+  const sil = i => i >= 0 && i < ow * oh && !out[i];
+  // Moore neighbour tracing, clockwise from west
+  const D = [[-1, 0], [-1, -1], [0, -1], [1, -1], [1, 0], [1, 1], [0, 1], [-1, 1]];
+  const sx = start % ow, sy = (start - sx) / ow;
+  let cx = sx, cy = sy, bdir = 0, contour = [{ x: sx, y: sy }];
+  for (let it = 0; it < 40000; it++) {
+    let found = -1;
+    for (let k = 1; k <= 8; k++) {
+      const d = (bdir + k) % 8, nx = cx + D[d][0], ny = cy + D[d][1];
+      if (nx < 0 || ny < 0 || nx >= ow || ny >= oh) continue;
+      if (sil(ny * ow + nx)) { found = d; break; }
+    }
+    if (found < 0) break;
+    cx += D[found][0]; cy += D[found][1];
+    if (cx === sx && cy === sy) break;
+    contour.push({ x: cx, y: cy });
+    bdir = (found + (found % 2 ? 5 : 6)) % 8; // direction of the last empty neighbour, seen from the new pixel
+  }
+  return { contour, enclosed };
+}
+
+// ---------- state ----------
+let state = 'title', t = 0, last = 0, best = 0;
+let me, trail, score, fuel, lives, shapes, flashes, toasts, bandits, tanker, tankerCool, exposure, deadAt, endReason, penises, turnKeys;
+const rnd = (a, b) => a + Math.random() * (b - a);
+const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+const dist = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
+
+function reset() {
+  me = { ...px(47.6, 29.6), a: -Math.PI / 2 };
+  trail = []; score = 0; fuel = 100; lives = 3; shapes = 0; penises = 0; flashes = []; toasts = []; exposure = 0; t = 0; endReason = '';
+  bandits = [{ ...px(56, 33), a: 0 }];
+  tanker = { cx: px(44.8, 31.6).x, cy: px(44.8, 31.6).y, ph: 0, x: 0, y: 0, a: 0 }; tankerCool = 0;
+  turnKeys = { left: false, right: false };
+}
+reset();
+const pointers = new Map();
+function toast(s, good) { toasts.push({ s, ttl: 2.2, good }); toasts = toasts.slice(-3); }
+
+// ---------- input ----------
+function canvasPt(e) { const r = cv.getBoundingClientRect(); return { x: (e.clientX - r.left) * W / r.width, y: (e.clientY - r.top) * H / r.height }; }
+const BTN_Y = H - 52, BTN_H = 34;
+cv.addEventListener('pointerdown', e => {
+  e.preventDefault(); cv.focus();
+  if (state === 'title') { state = 'play'; reset(); return; }
+  if (state === 'dead') { if (t - deadAt > 0.8) { state = 'play'; reset(); } return; }
+  const p = canvasPt(e);
+  if (p.y > BTN_Y && p.y < BTN_Y + BTN_H) {
+    if (p.x > 36 && p.x < 236) { scoreTrail(); return; }
+    if (p.x > 250 && p.x < 364) { wipeTrail(); return; }
+  }
+  pointers.set(e.pointerId, p.x < W / 2 ? -1 : 1);
+});
+const up = e => pointers.delete(e.pointerId);
+cv.addEventListener('pointerup', up); cv.addEventListener('pointercancel', up); cv.addEventListener('pointerleave', up);
+addEventListener('keydown', e => {
+  if (e.code === 'ArrowLeft' || e.code === 'KeyA') { turnKeys.left = true; e.preventDefault(); }
+  if (e.code === 'ArrowRight' || e.code === 'KeyD') { turnKeys.right = true; e.preventDefault(); }
+  if (e.code === 'Space' || e.code === 'Enter') { e.preventDefault(); if (state === 'play') scoreTrail(); else if (state === 'title' || t - deadAt > 0.8) { state = 'play'; reset(); } }
+  if ((e.code === 'KeyX' || e.code === 'Backspace') && state === 'play') { e.preventDefault(); wipeTrail(); }
+});
+addEventListener('keyup', e => { if (e.code === 'ArrowLeft' || e.code === 'KeyA') turnKeys.left = false; if (e.code === 'ArrowRight' || e.code === 'KeyD') turnKeys.right = false; });
+function turnInput() { let s = 0; for (const v of pointers.values()) s += v; if (turnKeys.left) s -= 1; if (turnKeys.right) s += 1; return clamp(s, -1, 1); }
+
+// ---------- geometry ----------
+function segInt(a, b, c, d) {
+  const rx = b.x - a.x, ry = b.y - a.y, sx = d.x - c.x, sy = d.y - c.y, den = rx * sy - ry * sx;
+  if (Math.abs(den) < 1e-9) return null;
+  const qx = c.x - a.x, qy = c.y - a.y, tt = (qx * sy - qy * sx) / den, uu = (qx * ry - qy * rx) / den;
+  return tt > 0 && tt < 1 && uu > 0 && uu < 1 ? { x: a.x + rx * tt, y: a.y + ry * tt } : null;
+}
+function splash(reason) {
+  lives--; exposure = 0; trail = []; toast(reason, false);
+  me = { ...px(47.6, 29.6), a: -Math.PI / 2 };
+  bandits.forEach((b, i) => { const p = px(56 + i * 2, 33 - i * 4); b.x = p.x; b.y = p.y; });
+  if (lives <= 0) die('Shot down three times. The ATO had a SAM ring on it. You had a shape in mind.');
+}
+function die(reason) { if (state !== 'play') return; state = 'dead'; deadAt = t; endReason = reason; best = Math.max(best, score); }
+function scoreTrail() {
+  if (trail.length < 10) { toast('DRAW SOMETHING FIRST', false); return; }
+  octx.fillStyle = '#000'; octx.fillRect(0, 0, OW, OH);
+  octx.strokeStyle = '#fff'; octx.lineWidth = 3.2; octx.lineJoin = 'round'; octx.lineCap = 'round';
+  octx.beginPath(); trail.forEach((q, i) => i ? octx.lineTo(q.x * OS, q.y * OS) : octx.moveTo(q.x * OS, q.y * OS)); octx.stroke();
+  const img = octx.getImageData(0, 0, OW, OH).data, grid = new Uint8Array(OW * OH);
+  for (let i = 0; i < OW * OH; i++) grid[i] = img[i * 4] > 128 ? 1 : 0;
+  const sil = silhouette(grid, OW, OH);
+  if (sil.open) { toast('NOTHING CLOSED. CLOSE A LOOP.', false); return; }
+  const poly = sil.contour.map(q => ({ x: q.x / OS, y: q.y / OS }));
+  const res = scoreShape(poly);
+  if (!res || res.small) { toast('TOO SMALL. AMBITION, PLEASE.', false); return; }
+  score += res.pts; shapes++;
+  const big = res.label === 'SKY PENIS';
+  if (big) { penises++; toast(res.pts >= 120 ? 'ANATOMICALLY AMBITIOUS. +20' : 'OKANOGAN COUNTY SALUTES YOU', true); }
+  const xs = poly.map(q => q.x), ys = poly.map(q => q.y);
+  flashes.push({ poly, label: res.label, pts: res.pts, ttl: big ? 3.4 : 2.2, x: (Math.min(...xs) + Math.max(...xs)) / 2, y: Math.min(...ys), big });
+  trail = [];
+}
+function wipeTrail() { if (trail.length) { trail = []; toast('CONTRAIL WIPED', false); } }
+
+// ---------- update ----------
+function update(dt) {
+  t += dt;
+  SAMS.forEach(s => s.on = Math.sin(t * 0.6 + s.phase) > 0.45);
+  tanker.ph += dt * 0.35; tanker.x = tanker.cx + Math.cos(tanker.ph) * 42; tanker.y = tanker.cy + Math.sin(tanker.ph) * 18; tanker.a = tanker.ph + Math.PI / 2;
+  if (state !== 'play') return;
+
+  // fly
+  me.a += turnInput() * 2.2 * dt;
+  const sp = 52;
+  me.x += Math.cos(me.a) * sp * dt; me.y += Math.sin(me.a) * sp * dt;
+  const dc = dist(me, { x: CX, y: CY });
+  if (dc > R - 6) { me.x = CX + (me.x - CX) * (R - 6) / dc; me.y = CY + (me.y - CY) * (R - 6) / dc; }
+  fuel -= dt * 0.6; if (fuel <= 0) die('Bingo fuel. RTB. You drew ' + shapes + ' shapes' + (penises ? ', one of which was inevitable.' : ', none of which were the shape.'));
+
+  // trail (no auto-scoring: loops compound until you hit SCORE)
+  const lastP = trail[trail.length - 1];
+  if (!lastP || dist(lastP, me) > 2.5) trail.push({ x: me.x, y: me.y, t });
+  trail = trail.filter(p => t - p.t < 240);
+
+  // threats
+  let inSam = false;
+  for (const s of SAMS) if (s.on && dist(me, s) < s.r) inSam = true;
+  exposure = inSam ? exposure + dt : Math.max(0, exposure - dt * 2);
+  if (exposure > 2.2) { splash('SAM SPLASH. IT WAS ON THE ATO.'); return; }
+  if (score >= 150 && bandits.length < 2) { bandits.push({ ...px(58, 29), a: 0 }); toast('SECOND BANDIT AIRBORNE', false); }
+  for (const b of bandits) {
+    const near = dist(b, me) < 120;
+    const want = near ? Math.atan2(me.y - b.y, me.x - b.x) : b.a + Math.sin(t * 0.7) * 0.02;
+    let da = want - b.a; while (da > Math.PI) da -= 2 * Math.PI; while (da < -Math.PI) da += 2 * Math.PI;
+    b.a += clamp(da, -0.9 * dt, 0.9 * dt);
+    const bs = (near ? 30 : 22) + Math.min(12, score * 0.03);
+    b.x += Math.cos(b.a) * bs * dt; b.y += Math.sin(b.a) * bs * dt;
+    const bd = dist(b, { x: CX, y: CY });
+    if (bd > R - 4) { b.x = CX + (b.x - CX) * (R - 4) / bd; b.y = CY + (b.y - CY) * (R - 4) / bd; }
+    if (dist(b, me) < 11) { splash('MERGED WITH A BANDIT. UNPROFESSIONAL.'); return; }
+  }
+  tankerCool = Math.max(0, tankerCool - dt);
+  if (!tankerCool && dist(me, tanker) < 14) { fuel = Math.min(140, fuel + 35); tankerCool = 10; toast('AAR COMPLETE +35s', true); }
+
+  for (const f of flashes) f.ttl -= dt; flashes = flashes.filter(f => f.ttl > 0);
+  for (const x of toasts) x.ttl -= dt; toasts = toasts.filter(x => x.ttl > 0);
+}
+
+// ---------- draw ----------
+function txt(s, x, y, size, color, align = 'left') {
+  ctx.font = size + 'px "Press Start 2P", "Courier New", monospace';
+  ctx.fillStyle = color; ctx.textAlign = align; ctx.textBaseline = 'top';
+  ctx.fillText(s, x, y);
+}
+function wrap(s, x, y, size, color, maxW, lh) {
+  ctx.font = size + 'px "Press Start 2P", "Courier New", monospace';
+  let line = '', yy = y;
+  for (const w of s.split(' ')) {
+    const test = line ? line + ' ' + w : w;
+    if (ctx.measureText(test).width > maxW && line) { txt(line, x, yy, size, color, 'center'); line = w; yy += lh; }
+    else line = test;
+  }
+  if (line) txt(line, x, yy, size, color, 'center');
+  return yy + lh;
+}
+function drawPlane(p, col) {
+  ctx.save(); ctx.translate(p.x, p.y); ctx.rotate(p.a);
+  ctx.strokeStyle = col; ctx.lineWidth = 2; ctx.lineCap = 'round';
+  ctx.beginPath(); ctx.moveTo(-6, 0); ctx.lineTo(7, 0); ctx.moveTo(1, 0); ctx.lineTo(-4, -6); ctx.moveTo(1, 0); ctx.lineTo(-4, 6); ctx.moveTo(-6, 0); ctx.lineTo(-8, -3); ctx.moveTo(-6, 0); ctx.lineTo(-8, 3); ctx.stroke();
+  ctx.restore();
+}
+function friendly(p, label) { // 2525-style friendly air: arc
+  ctx.strokeStyle = '#5ec8ff'; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(p.x, p.y + 3, 7, Math.PI, 0); ctx.stroke();
+  txt(label, p.x, p.y + 6, 5, '#5ec8ff', 'center');
+}
+function hostile(p, label) { // hostile air: chevron
+  ctx.strokeStyle = '#ff4d4d'; ctx.lineWidth = 2; ctx.beginPath(); ctx.moveTo(p.x - 7, p.y + 5); ctx.lineTo(p.x, p.y - 6); ctx.lineTo(p.x + 7, p.y + 5); ctx.stroke();
+  if (label) txt(label, p.x, p.y + 8, 5, '#ff4d4d', 'center');
+}
+function draw() {
+  ctx.fillStyle = '#060906'; ctx.fillRect(0, 0, W, H);
+  ctx.save(); ctx.beginPath(); ctx.arc(CX, CY, R, 0, Math.PI * 2); ctx.clip();
+  ctx.fillStyle = '#0a130c'; ctx.fillRect(0, 0, W, H);
+
+  // land
+  for (const id in MAP) {
+    const hi = id === 'IRQ' || id === 'IRN';
+    for (const ring of MAP[id]) {
+      ctx.beginPath(); ring.forEach(([lo, la], i) => { const p = px(lo, la); i ? ctx.lineTo(p.x, p.y) : ctx.moveTo(p.x, p.y); }); ctx.closePath();
+      ctx.fillStyle = hi ? 'rgba(57,255,106,.10)' : 'rgba(57,255,106,.045)'; ctx.fill();
+      ctx.strokeStyle = hi ? 'rgba(57,255,106,.45)' : 'rgba(57,255,106,.18)'; ctx.lineWidth = 1; ctx.stroke();
+    }
+  }
+  const iq = px(43.5, 32.6), ir = px(54.5, 33.2);
+  txt('IRAQ', iq.x, iq.y, 9, 'rgba(57,255,106,.35)', 'center'); txt('IRAN', ir.x, ir.y, 9, 'rgba(57,255,106,.35)', 'center');
+  const g = px(50.2, 27.1); txt('PERSIAN GULF', g.x, g.y, 5, 'rgba(94,200,255,.35)', 'center');
+  for (const [n, lo, la] of CITIES) { const p = px(lo, la); ctx.fillStyle = 'rgba(57,255,106,.55)'; ctx.fillRect(p.x - 1, p.y - 1, 3, 3); txt(n, p.x + 4, p.y - 2, 4, 'rgba(57,255,106,.5)'); }
+
+  // range rings + bearings
+  ctx.strokeStyle = 'rgba(57,255,106,.22)'; ctx.lineWidth = 1;
+  for (let k = 1; k <= 3; k++) { ctx.beginPath(); ctx.arc(CX, CY, R * k / 3, 0, Math.PI * 2); ctx.stroke(); }
+  ctx.beginPath(); ctx.moveTo(CX - R, CY); ctx.lineTo(CX + R, CY); ctx.moveTo(CX, CY - R); ctx.lineTo(CX, CY + R); ctx.stroke();
+  for (let b = 0; b < 360; b += 30) {
+    const a = (b - 90) * Math.PI / 180;
+    ctx.beginPath(); ctx.moveTo(CX + Math.cos(a) * (R - 8), CY + Math.sin(a) * (R - 8)); ctx.lineTo(CX + Math.cos(a) * R, CY + Math.sin(a) * R); ctx.stroke();
+    txt(String(b).padStart(3, '0'), CX + Math.cos(a) * (R - 18), CY + Math.sin(a) * (R - 18) - 3, 5, 'rgba(57,255,106,.5)', 'center');
+  }
+  // sweep
+  const sa = t * 1.6;
+  const sw = ctx.createConicGradient ? ctx.createConicGradient(sa - Math.PI / 2, CX, CY) : null;
+  if (sw) { sw.addColorStop(0, 'rgba(57,255,106,.22)'); sw.addColorStop(0.12, 'rgba(57,255,106,0)'); sw.addColorStop(1, 'rgba(57,255,106,0)'); ctx.fillStyle = sw; ctx.fillRect(0, 0, W, H); }
+  ctx.strokeStyle = 'rgba(57,255,106,.6)'; ctx.beginPath(); ctx.moveTo(CX, CY); ctx.lineTo(CX + Math.cos(sa - Math.PI / 2) * R, CY + Math.sin(sa - Math.PI / 2) * R); ctx.stroke();
+
+  // SAMs
+  for (const s of SAMS) {
+    ctx.setLineDash(s.on ? [] : [3, 4]); ctx.strokeStyle = s.on ? 'rgba(255,77,77,.8)' : 'rgba(255,77,77,.3)'; ctx.lineWidth = s.on ? 1.5 : 1;
+    ctx.beginPath(); ctx.arc(s.x, s.y, s.r, 0, Math.PI * 2); ctx.stroke(); ctx.setLineDash([]);
+    if (s.on) { ctx.fillStyle = 'rgba(255,77,77,.08)'; ctx.fill(); }
+    ctx.strokeStyle = '#ff4d4d'; ctx.strokeRect(s.x - 4, s.y - 4, 8, 8); ctx.fillStyle = '#ff4d4d'; ctx.fillRect(s.x - 1, s.y - 1, 2, 2);
+    txt('SAM', s.x, s.y + 7, 4, '#ff4d4d', 'center');
+  }
+  // friendlies
+  friendly(AWACS, 'E-3'); friendly(BASE, 'AL UDEID'); friendly(tanker, tankerCool ? 'KC-135 (BUSY)' : 'KC-135');
+  for (const b of bandits) hostile(b, 'MIG');
+
+  // trail
+  if (trail.length > 1) {
+    for (let i = 1; i < trail.length; i++) {
+      const age = t - trail[i].t;
+      ctx.strokeStyle = 'rgba(57,255,106,' + (0.9 * Math.max(0.45, 1 - age / 240)).toFixed(2) + ')'; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.moveTo(trail[i - 1].x, trail[i - 1].y); ctx.lineTo(trail[i].x, trail[i].y); ctx.stroke();
+    }
+  }
+  // scored shapes
+  for (const f of flashes) {
+    const a = Math.min(1, f.ttl);
+    ctx.fillStyle = 'rgba(242,193,78,' + (0.35 * a).toFixed(2) + ')'; ctx.beginPath(); f.poly.forEach((p, i) => i ? ctx.lineTo(p.x, p.y) : ctx.moveTo(p.x, p.y)); ctx.closePath(); ctx.fill();
+    ctx.strokeStyle = 'rgba(242,193,78,' + a.toFixed(2) + ')'; ctx.lineWidth = f.big ? 3 : 1.5; ctx.stroke();
+  }
+  drawPlane(me, exposure > 0 ? '#ff4d4d' : GREEN);
+  ctx.restore();
+
+  // scope bezel
+  ctx.strokeStyle = '#2f5a3a'; ctx.lineWidth = 6; ctx.beginPath(); ctx.arc(CX, CY, R + 3, 0, Math.PI * 2); ctx.stroke();
+
+  // shape labels (over bezel so they never clip)
+  for (const f of flashes) {
+    const a = Math.min(1, f.ttl);
+    ctx.globalAlpha = a;
+    if (f.big) { txt('SKY PENIS', W / 2, 250, 22, '#f2c14e', 'center'); txt('MAXIMUM POINTS  +' + f.pts, W / 2, 280, 9, '#f9f6ec', 'center'); }
+    else { txt(f.label, clamp(f.x, 60, W - 60), clamp(f.y - 22, TOPH + 4, H - 30), 7, '#f2c14e', 'center'); txt('+' + f.pts, clamp(f.x, 60, W - 60), clamp(f.y - 12, TOPH + 14, H - 20), 7, '#f9f6ec', 'center'); }
+    ctx.globalAlpha = 1;
+  }
+
+  // HUD
+  ctx.fillStyle = '#060906'; ctx.fillRect(0, 0, W, TOPH);
+  ctx.fillStyle = '#2f5a3a'; ctx.fillRect(0, TOPH - 2, W, 2);
+  txt('SCORE ' + score, 10, 10, 9, GREEN);
+  txt('SHAPES ' + shapes, W - 10, 10, 9, GREEN, 'right');
+  txt('FUEL', 10, 30, 6, 'rgba(57,255,106,.6)');
+  ctx.fillStyle = 'rgba(57,255,106,.15)'; ctx.fillRect(40, 29, 120, 8);
+  ctx.fillStyle = fuel < 20 ? '#ff4d4d' : GREEN; ctx.fillRect(40, 29, 120 * clamp(fuel, 0, 140) / 140, 8);
+  for (let i = 0; i < 3; i++) drawPlane({ x: W - 20 - i * 18, y: 34, a: -Math.PI / 2 }, i < lives ? GREEN : 'rgba(57,255,106,.2)');
+  toasts.forEach((x, i) => { ctx.globalAlpha = Math.min(1, x.ttl); txt(x.s, 10, 44 + i * 9, 6, x.good ? GREEN : '#ff4d4d'); });
+  ctx.globalAlpha = 1;
+  txt('< TURN', 6, BTN_Y + 13, 6, 'rgba(57,255,106,.35)'); txt('TURN >', W - 6, BTN_Y + 13, 6, 'rgba(57,255,106,.35)', 'right');
+  ctx.strokeStyle = GREEN; ctx.lineWidth = 2; ctx.strokeRect(36, BTN_Y, 200, BTN_H); ctx.fillStyle = 'rgba(57,255,106,.12)'; ctx.fillRect(36, BTN_Y, 200, BTN_H);
+  txt('SCORE SHAPE', 136, BTN_Y + 13, 8, GREEN, 'center');
+  ctx.strokeStyle = 'rgba(57,255,106,.5)'; ctx.strokeRect(250, BTN_Y, 114, BTN_H);
+  txt('WIPE', 307, BTN_Y + 13, 8, 'rgba(57,255,106,.7)', 'center');
+
+  if (state === 'title') {
+    ctx.fillStyle = 'rgba(6,9,6,.84)'; ctx.fillRect(0, 0, W, H);
+    txt('CONTRAIL', W / 2, 84, 26, GREEN, 'center');
+    txt('COMMAND', W / 2, 118, 26, GREEN, 'center');
+    wrap('Hold the left or right side of the scope to turn. Loops you draw combine into one shape. Tap SCORE SHAPE when the masterpiece is complete.', W / 2, 180, 9, '#e6e1d3', 330, 18);
+    wrap('Bigger and weirder shapes score more. Stay out of solid SAM rings, keep clear of the MiG, and hit the tanker for gas.', W / 2, 272, 9, '#9aa4ad', 330, 18);
+    wrap('One shape is worth 100. You already know which one.', W / 2, 366, 9, '#f2c14e', 330, 18);
+    if (Math.floor(t * 2) % 2 === 0) txt('TAP TO LAUNCH', W / 2, 470, 11, GREEN, 'center');
+  }
+  if (state === 'dead') {
+    ctx.fillStyle = 'rgba(6,9,6,.86)'; ctx.fillRect(0, 0, W, H);
+    txt('SORTIE', W / 2, 96, 26, '#ff4d4d', 'center');
+    txt('COMPLETE', W / 2, 130, 26, '#ff4d4d', 'center');
+    let y = wrap(endReason, W / 2, 186, 8, '#e6e1d3', 330, 15);
+    txt('SCORE  ' + score, W / 2, y + 22, 10, GREEN, 'center');
+    txt('SHAPES  ' + shapes + '   SKY PENISES  ' + penises, W / 2, y + 42, 8, GREEN, 'center');
+    txt('BEST  ' + best, W / 2, y + 62, 10, '#9aa4ad', 'center');
+    txt('POST-MISSION ASSESSMENT', W / 2, y + 104, 8, '#f2c14e', 'center');
+    wrap(penises ? 'A. Airpower is inherently expressive. The wing commander disagrees.' : score >= 200 ? 'B. Creative use of the AOR. Missed the obvious.' : score >= 80 ? 'C. Drew shapes. Technically.' : 'F. Wasted the tanker. Drew a circle. Roughly.', W / 2, y + 122, 8, '#e6e1d3', 330, 15);
+    if (t - deadAt > 0.8 && Math.floor(t * 2) % 2 === 0) txt('TAP TO RELAUNCH', W / 2, 520, 10, GREEN, 'center');
+  }
+}
+const TOPH = 64;
+
+// ---------- loop ----------
+function loop(ts) {
+  const dt = Math.min(0.05, (ts - last) / 1000 || 0); last = ts;
+  update(dt); draw();
+  requestAnimationFrame(loop);
+}
+requestAnimationFrame(loop);
+})();
+</script>
+</body>
+</html>
