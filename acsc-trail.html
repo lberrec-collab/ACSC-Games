@@ -1,0 +1,552 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="The ACSC Trail">
+<meta name="theme-color" content="#232a33">
+<title>The ACSC Trail – Bingo Fuel Arcade</title>
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+<style>
+  :root{--bg:#232a33;--panel:#2e3742;--text:#e6e1d3;--muted:#9aa4ad;--accent:#f2c14e;--g:#39ff6a;--gd:#1f8a3e;--k:#040804}
+  *{box-sizing:border-box}
+  html,body{margin:0;background:var(--bg);color:var(--text);font-family:"Press Start 2P","Courier New",monospace}
+  body{min-height:100vh;min-height:100dvh;display:flex;flex-direction:column;align-items:center;
+    padding:max(24px,env(safe-area-inset-top)) 12px max(40px,env(safe-area-inset-bottom));
+    -webkit-tap-highlight-color:transparent;overscroll-behavior:none}
+  header{width:100%;max-width:440px;font-size:9px;color:var(--muted);display:flex;justify-content:space-between;margin-bottom:28px}
+  h1{font-size:18px;line-height:1.5;margin:0 0 10px;color:var(--accent)}
+  .tag{font-size:9px;line-height:2;max-width:420px;margin:0 0 18px}
+  .tag em{font-style:normal;color:var(--muted)}
+  .cab{background:var(--panel);padding:10px;border-radius:6px;box-shadow:0 0 0 4px #14181d,0 0 0 6px #4a5561;width:min(420px,100%)}
+  #scene{display:block;width:100%;aspect-ratio:4/1;background:var(--k);image-rendering:pixelated}
+  #screen{background:var(--k);color:var(--g);min-height:420px;padding:14px 12px 16px;font-size:9px;line-height:1.9;
+    border-top:2px solid var(--gd)}
+  #screen h2{font-size:11px;color:var(--g);margin:0 0 10px;line-height:1.6}
+  #screen p{margin:0 0 10px}
+  #screen .dim{color:#7fc78f}
+  #screen .warn{color:#ff6b5b}
+  #screen .gold{color:var(--accent)}
+  .stat{display:flex;justify-content:space-between;gap:8px;border-bottom:1px dotted var(--gd);padding:2px 0}
+  .btn{display:block;width:100%;background:transparent;color:var(--g);border:2px solid var(--gd);font:inherit;font-size:9px;
+    text-align:left;padding:10px 10px;margin:6px 0;cursor:pointer;line-height:1.6;touch-action:manipulation}
+  .btn:hover,.btn:focus-visible{border-color:var(--g);background:rgba(57,255,106,.08);outline:none}
+  .btn.gold{color:var(--accent);border-color:#8a6d2a}
+  .btn:disabled{opacity:.4;cursor:default}
+    input[type=text],input[type=number]{width:100%;background:var(--k);color:var(--g);border:2px solid var(--gd);font:inherit;font-size:9px;padding:8px;margin:4px 0}
+  .bar{height:8px;background:rgba(57,255,106,.15);margin:4px 0 10px}.bar i{display:block;height:100%;background:var(--g)}
+  footer{font-size:8px;line-height:1.9;color:var(--muted);max-width:420px;margin-top:26px;text-align:center}
+</style>
+</head>
+<body>
+<header><span>Bingo Fuel Arcade</span><span>Now playing</span></header>
+<h1>The ACSC Trail</h1>
+<p class="tag">Get your seminar from in-processing to graduation.<br>
+<em>2,000 pages of reading. 40 weeks. Every fork is a doctrinal decision.</em></p>
+<div class="cab"><canvas id="scene" width="400" height="100"></canvas><div id="screen"></div></div>
+<footer>You have died of PowerPoint.<br>Not affiliated with Air University. Obviously.</footer>
+
+<script>
+(() => {
+// ---------- question bank (answer index 0 is correct; shuffled on display) ----------
+const BANK = [
+  ["Clausewitz's 'paradoxical trinity' is composed of:", ["Primordial violence, chance and probability, and reason (policy)", "The people, the army, and the government", "Ends, ways, and means", "Fog, friction, and chance"]],
+  ["Who wrote that war is 'merely the continuation of policy by other means'?", ["Clausewitz", "Jomini", "Sun Tzu", "Machiavelli"]],
+  ["Clausewitz defined the center of gravity as:", ["The hub of all power and movement on which everything depends", "The enemy's capital city", "The point where the attacker's strength no longer exceeds the defender's", "The decisive point on a line of operation"]],
+  ["The culminating point of the attack is:", ["The point at which the attacker's strength no longer exceeds the defender's", "The moment the enemy capital falls", "The end state of a campaign", "The line of departure for the offensive"]],
+  ["Which theorist held that supreme excellence is breaking the enemy's resistance without fighting?", ["Sun Tzu", "Clausewitz", "Douhet", "Mahan"]],
+  ["Jomini is most associated with:", ["Prescriptive principles such as interior lines and decisive points", "The paradoxical trinity", "Command of the air", "The fleet in being"]],
+  ["Mahan argued sea power rested on:", ["Command of the sea won by decisive fleet battle", "Coastal defense and commerce raiding", "Amphibious raids on the periphery", "Submarine warfare"]],
+  ["Corbett differed from Mahan by emphasizing:", ["Limited maritime war and the fleet in being", "Decisive battle above all else", "Strategic bombing of ports", "Nuclear deterrence at sea"]],
+  ["Douhet's central claim in The Command of the Air:", ["The bomber will get through, so strike cities and morale directly", "Air power should support the ground commander", "Fighters are the decisive aircraft", "Air power is best used at sea"]],
+  ["Billy Mitchell was court-martialed in:", ["1925", "1919", "1932", "1941"]],
+  ["Warden's Five Rings, from the center outward:", ["Leadership, system essentials, infrastructure, population, fielded forces", "Fielded forces, population, infrastructure, system essentials, leadership", "Leadership, infrastructure, population, economy, military", "Government, people, army, industry, transport"]],
+  ["Boyd's OODA loop stands for:", ["Observe, Orient, Decide, Act", "Observe, Organize, Direct, Assess", "Orient, Observe, Decide, Attack", "Objective, Offensive, Deception, Attrition"]],
+  ["Pape (Bombing to Win) argued coercion by air power works through:", ["Denial of the enemy's military strategy", "Punishment of the civilian population", "Decapitation of leadership", "Risk escalation"]],
+  ["Which is NOT a principle of mission command (ADP 6-0)?", ["Centralized execution", "Mutual trust", "Disciplined initiative", "Risk acceptance"]],
+  ["The three levels of war are:", ["Strategic, operational, tactical", "Grand, theater, battlefield", "National, joint, service", "Political, military, economic"]],
+  ["DIME stands for:", ["Diplomatic, informational, military, economic", "Defense, intelligence, maneuver, engagement", "Deterrence, influence, mobilization, escalation", "Direct, indirect, mixed, enabling"]],
+  ["The first step of the Joint Planning Process is:", ["Planning initiation", "Mission analysis", "COA development", "Wargaming"]],
+  ["In the JPP, COA analysis and wargaming comes right after:", ["COA development", "Mission analysis", "COA comparison", "COA approval"]],
+  ["Which is a joint function (JP 3-0)?", ["Sustainment", "Deterrence", "Diplomacy", "Legitimacy"]],
+  ["The three principles added to the nine principles of war to form the principles of joint operations:", ["Restraint, perseverance, legitimacy", "Mass, maneuver, surprise", "Unity of effort, agility, resilience", "Security, simplicity, objective"]],
+  ["In the Lykke ends-ways-means model, 'ways' are:", ["The concepts or methods for using resources to reach objectives", "The objectives to be achieved", "The resources available", "The risk accepted"]],
+  ["Thucydides said states go to war out of:", ["Fear, honor, and interest", "Greed, ideology, and revenge", "Land, gold, and glory", "Pride, faith, and fear"]],
+  ["Huntington's The Soldier and the State advocated:", ["Objective civilian control through professional autonomy", "Subjective civilian control through politicization", "Abolishing the officer corps", "Direct legislative command of forces"]],
+  ["Janowitz argued the modern military should become a:", ["Constabulary force", "Citizen militia", "Mercenary corps", "Nuclear priesthood"]],
+  ["Schelling distinguished deterrence from:", ["Compellence", "Defense", "Denial", "Attrition"]],
+  ["Allison's three models in Essence of Decision:", ["Rational actor, organizational behavior, governmental politics", "Realist, liberal, constructivist", "Strategic, operational, tactical", "Denial, punishment, decapitation"]],
+  ["Colin Gray described strategy as:", ["The bridge between military power and political purpose", "The art of the general", "The science of logistics", "Force at the decisive point"]],
+  ["Per JP 5-0, commander's intent includes purpose, end state, and:", ["Risk", "Budget", "Timeline", "Rules of engagement"]],
+  ["Who wrote that in war 'everything is very simple, but the simplest thing is difficult'?", ["Clausewitz", "Sun Tzu", "Jomini", "Liddell Hart"]],
+  ["Auftragstaktik, the ancestor of mission command, comes from which army?", ["Prussian / German", "French", "British", "Roman"]],
+  ["Liddell Hart is best known for:", ["The indirect approach", "The five rings", "The fleet in being", "Parallel attack"]],
+  ["Clausewitz held that the stronger form of war is:", ["Defense", "Offense", "Siege", "Guerrilla war"]],
+  ["Mahan's most famous book:", ["The Influence of Sea Power upon History", "Some Principles of Maritime Strategy", "The Command of the Air", "On War"]],
+  ["The Air Corps Tactical School developed the doctrine of:", ["High-altitude daylight precision bombing of the industrial web", "Close air support of infantry", "Naval air superiority", "Nuclear deterrence"]],
+  ["Deterrence by denial works by:", ["Convincing the adversary the attack will fail", "Threatening unacceptable costs afterward", "Removing the adversary's leadership", "Buying off the adversary"]],
+  ["Unity of command means:", ["All forces operate under a single responsible commander", "All services train together", "Every unit has one mission", "The commander is never questioned"]],
+  ["Operational reach is:", ["The distance and duration across which a force can employ capabilities", "The number of aircraft in a wing", "The commander's span of control", "The range of a weapon"]],
+  ["A decisive point is:", ["Key terrain, event, factor, or function that gives a marked advantage over the enemy", "The enemy's center of gravity", "The end state", "The line of departure"]],
+  ["Corbett's 'fleet in being' is:", ["A fleet that avoids battle yet ties down the enemy by existing", "A fleet permanently at sea", "A fleet that has won command of the sea", "A reserve fleet in dry dock"]],
+  ["Which principle of war: direct every operation toward a clearly defined, decisive, attainable goal?", ["Objective", "Offensive", "Mass", "Simplicity"]],
+  ["Moltke the Elder is remembered for observing that:", ["No plan survives first contact with the enemy", "War is politics by other means", "Command of the air is decisive", "The enemy is a system"]],
+  ["ACSC papers follow which citation style?", ["Chicago / Turabian", "APA", "MLA", "Whatever Grammarly suggests"]],
+  ["Deptula's 'parallel warfare' means:", ["Striking many targets simultaneously across the enemy system", "Attacking in sequence from the outer ring inward", "Two coalitions fighting the same enemy", "Air and ground advancing side by side"]],
+  ["Trenchard claimed the moral effect of bombing exceeded the material effect by a ratio of:", ["20 to 1", "1 to 1", "5 to 1", "100 to 1"]],
+  ["Krulak's 'strategic corporal' refers to:", ["Junior leaders whose tactical decisions carry strategic consequences", "A corporal promoted to strategist", "The lowest rank on a joint staff", "A NATO liaison billet"]],
+  ["Sun Tzu: know the enemy and know yourself, and in a hundred battles you will:", ["Never be in peril", "Always win", "Win half", "Need no allies"]],
+  ["Corbett's major work is:", ["Some Principles of Maritime Strategy", "The Influence of Sea Power upon History", "The Command of the Air", "Précis de l'Art de la Guerre"]],
+  ["Giulio Douhet served in which nation's armed forces?", ["Italy", "France", "Germany", "Britain"]],
+  ["Hugh Trenchard is best known as:", ["First Chief of the Air Staff of the RAF", "The architect of the Luftwaffe", "Mitchell's defense counsel", "The author of Bombing to Win"]],
+  ["The Doolittle Raid on Tokyo took place in:", ["1942", "1941", "1943", "1945"]],
+  ["The Doolittle Raiders launched their B-25s from:", ["USS Hornet", "USS Enterprise", "Midway Island", "USS Lexington"]],
+  ["Mitchell's 1921 bombing tests sank which captured German battleship?", ["Ostfriesland", "Bismarck", "Tirpitz", "Scharnhorst"]],
+  ["The Army's commander's intent contains expanded purpose, key tasks, and:", ["End state", "Budget", "Task organization", "Timeline"]],
+  ["Campaign design happens primarily at which level of war?", ["Operational", "Tactical", "Strategic", "Grand strategic"]],
+  ["Which is an element of operational design (JP 5-0)?", ["Lines of effort", "Mass", "Restraint", "Auftragstaktik"]],
+  ["In Strange's COG framework, a critical vulnerability is:", ["A critical requirement that is deficient or vulnerable to attack", "The enemy's capital", "The commander's end state", "A line of operation"]],
+  ["The targeting kill chain F2T2EA stands for:", ["Find, fix, track, target, engage, assess", "Find, fight, take, target, exploit, attack", "Fix, flank, track, terminate, exit, assess", "Forecast, fix, target, transmit, execute, audit"]],
+  ["The JFACC is normally also designated as:", ["Airspace control authority and area air defense commander", "Joint force land component commander", "Combatant commander", "Theater special operations commander"]],
+  ["The air tasking order typically covers a period of:", ["24 hours", "72 hours", "One week", "One phase"]],
+  ["The Air Force's classic command tenet is:", ["Centralized control and decentralized execution", "Decentralized control and centralized execution", "Unity of effort over unity of command", "Mission orders over intent"]],
+  ["Which is NOT one of the nine principles of war?", ["Legitimacy", "Mass", "Surprise", "Security"]],
+  ["The Eisenhower-era nuclear strategy of massive retaliation was succeeded by:", ["Flexible response", "Mutual assured destruction", "Minimum deterrence", "Escalation dominance"]],
+  ["Who wrote that from now on the chief purpose of the military must be to avert wars, not win them?", ["Bernard Brodie", "Herman Kahn", "Thomas Schelling", "Albert Wohlstetter"]],
+  ["A secure second-strike capability is the basis of:", ["Stable mutual deterrence", "Preventive war", "Damage limitation", "Escalation dominance"]],
+  ["Wohlstetter's 'Delicate Balance of Terror' argued that deterrence:", ["Is not automatic and requires survivable forces", "Is guaranteed by nuclear weapons alone", "Requires civil defense above all", "Was impossible"]],
+  ["Mao's three phases of protracted war:", ["Strategic defensive, stalemate, strategic offensive", "Mobilize, isolate, annihilate", "Guerrilla, conventional, nuclear", "Infiltrate, subvert, seize"]],
+  ["Galula argued counterinsurgency is:", ["80 percent political, 20 percent military", "Won by firepower", "Best left to conventional forces", "Purely a police matter"]],
+  ["Clausewitz wrote that war has its own grammar but not its own:", ["Logic", "Vocabulary", "Ethics", "Tempo"]],
+  ["Clausewitz's On War was published in:", ["1832, posthumously", "1815", "1866", "1799"]],
+  ["Jomini's chief work:", ["Summary of the Art of War", "On War", "The Art of War", "Strategy: The Indirect Approach"]],
+  ["Interior lines (Jomini) give the advantage of:", ["Shorter distances from a central position", "Longer supply routes", "Naval superiority", "Air superiority"]],
+  ["The Melian Dialogue's famous line: the strong do what they can and the weak:", ["Suffer what they must", "Fight to the last", "Choose their allies", "Wait for the gods"]],
+  ["Structural realism (Waltz) explains state behavior mainly by:", ["The anarchic structure of the international system", "Leaders' personalities", "Domestic ideology", "International law"]],
+  ["Waltz's three images (levels of analysis) are:", ["Individual, state, international system", "Tactical, operational, strategic", "Land, sea, air", "Past, present, future"]],
+  ["The security dilemma describes:", ["Defensive measures by one state that appear threatening to others", "A commander's choice between two bad options", "Trading liberty for safety", "The gap between ends and means"]],
+  ["Unity of effort applies when:", ["Forces are not all under a single commander, as in coalitions", "One commander controls everything", "Only one service is involved", "The mission is purely tactical"]],
+  ["In the six-phase model, the phase after Seize the Initiative is:", ["Dominate", "Stabilize", "Deter", "Enable civil authority"]],
+  ["JIPOE stands for:", ["Joint Intelligence Preparation of the Operational Environment", "Joint Integrated Plan for Offensive Effects", "Joint Information Program on Enemy", "Joint Interagency Planning and Operations Element"]],
+  ["PMESII describes the operational environment as:", ["Political, military, economic, social, information, infrastructure", "Plan, mobilize, execute, sustain, inform, inspect", "People, materiel, energy, space, intelligence, industry", "Purpose, method, end state, sequencing, intent, initiative"]],
+  ["Effects-based operations is most associated with:", ["Deptula", "Douhet", "Mahan", "Jomini"]],
+  ["Boyd argued the decisive element of the OODA loop is:", ["Orientation", "Observation", "Decision", "Action"]],
+  ["Clausewitz's 'center of gravity' translates the German:", ["Schwerpunkt", "Blitzkrieg", "Auftragstaktik", "Kesselschlacht"]],
+  ["Economy of force means:", ["Allocating minimum essential combat power to secondary efforts", "Spending the least money", "Using only one service", "Avoiding combat"]],
+  ["Schelling's Arms and Influence (1966) is chiefly about:", ["Coercion: the diplomacy of violence", "Naval procurement", "Counterinsurgency", "Arms control verification"]],
+  ["The Weinberger and Powell doctrines both stressed:", ["Clear objectives, overwhelming force, and public support", "Limited war by proxy", "Nuclear first use", "Gradual escalation"]],
+  ["The Goldwater-Nichols Act was passed in:", ["1986", "1947", "1973", "2001"]],
+  ["Goldwater-Nichols strengthened the authority of:", ["The Chairman of the JCS and combatant commanders", "The service chiefs", "Congress", "The Joint Staff's budget"]],
+  ["The operational chain of command runs from the President through the SecDef to:", ["Combatant commanders", "The Chairman of the JCS", "The service secretaries", "The Joint Staff"]],
+  ["The armed forces are governed primarily by which title of U.S. Code?", ["Title 10", "Title 50", "Title 32", "Title 18"]],
+  ["The Abrams (Total Force) doctrine ensured that:", ["Major wars require mobilizing the reserve components", "The Army stays all-volunteer", "Armor is the decisive arm", "The National Guard stays at home"]],
+  ["The ends-ways-means model was popularized by:", ["Arthur Lykke", "Colin Gray", "Carl Builder", "Harry Summers"]],
+  ["The Air Force PME school immediately senior to ACSC is:", ["Air War College", "Squadron Officer School", "SAASS", "National War College"]],
+  ["Air University is located at:", ["Maxwell AFB, Alabama", "Wright-Patterson AFB, Ohio", "Randolph AFB, Texas", "Fort Leavenworth, Kansas"]],
+  ["Machiavelli argued a prince should rely on:", ["His own arms and citizen soldiers, not mercenaries", "Mercenaries", "Foreign auxiliaries", "Fortune alone"]],
+  ["Liddell Hart's indirect approach aims to:", ["Dislocate the enemy psychologically and physically before battle", "Mass at the strongest point", "Fight a decisive frontal battle", "Avoid maneuver"]],
+  ["Kilcullen's 'accidental guerrilla' describes:", ["Locals who fight outsiders intervening in their area, not out of ideology", "Conscripted insurgents", "Foreign fighters", "Deserters"]],
+  ["Which ring did Warden consider most important to strike?", ["Leadership", "Fielded forces", "Population", "Infrastructure"]],
+  ["Pape's term for coercion by threatening civilians:", ["Punishment", "Denial", "Decapitation", "Attrition"]],
+  ["In the JPP, the step that produces the commander's approved concept is:", ["COA approval", "Mission analysis", "Planning initiation", "Plan or order development"]],
+  ["Mission orders are:", ["Directives that emphasize results, not how to achieve them", "Detailed step-by-step instructions", "Orders issued only in writing", "Orders from higher headquarters only"]],
+  ["Disciplined initiative means:", ["Acting within the commander's intent when orders no longer fit the situation", "Ignoring orders", "Waiting for guidance", "Reporting every decision upward"]],
+  ["Which theorist's ideas underpin the 'industrial web' theory?", ["Air Corps Tactical School faculty", "Corbett", "Jomini", "Galula"]],
+  ["Clausewitz's 'absolute war' is:", ["A theoretical extreme that real war never reaches", "Total mobilization", "Nuclear war", "War without policy"]],
+  ["Courses of action are compared using:", ["Evaluation criteria and a decision matrix", "Coin flip", "Seniority", "Wargame results alone"]],
+  ["Which is a Sun Tzu principle?", ["All warfare is based on deception", "Command of the air is decisive", "Attack the fielded forces first", "Defense is the stronger form"]],
+];
+
+// ---------- content ----------
+const PAGES_TOTAL = 2000, WEEKS_MAX = 40;
+const LANDMARKS = [
+  { at: 0,    name: 'In-processing, Maxwell AFB', text: 'Your seminar assembles. Someone already has a laminated reading list.' },
+  { at: 180,  name: 'First reading assignment', gate: true, text: 'Four hundred pages of Clausewitz. Due Monday. It is Sunday.' },
+  { at: 360,  name: 'LP-601: Leadership & the Profession of Arms', text: 'Huntington and Janowitz argue in your head at 2 a.m.' },
+  { at: 540,  name: 'Warfare Studies: the theorists', gate: true, text: 'Jomini would like a word about your lines of operation.' },
+  { at: 720,  name: 'The airpower theorists', text: 'Douhet, Mitchell, Trenchard, Warden. Everything is airpower-shaped.' },
+  { at: 900,  name: 'Mission Command group project', gate: true, text: 'Five people. One shared document. Disciplined initiative everywhere.' },
+  { at: 1020, name: 'Thanksgiving', rest: true, store: true, text: 'Nobody reads. The bookstore is open.' },
+  { at: 1150, name: 'Fall exams', gate: true, text: 'The blue book is waiting.' },
+  { at: 1250, name: 'Winter break', rest: true, text: 'You told yourself you would get ahead on reading. You did not.' },
+  { at: 1400, name: 'Joint Planning block', text: 'Seven steps. Fourteen acronyms. One wall of butcher paper.' },
+  { at: 1560, name: 'Research paper due', gate: true, text: 'It is 25 pages, Chicago style, and the footnotes hate you.' },
+  { at: 1700, name: 'Spring break', rest: true, store: true, text: 'A brief taste of freedom. The bookstore is open.' },
+  { at: 1820, name: 'Joint warfighting exercise', gate: true, text: 'The wargame is on. Someone is arguing about the COG. Again.' },
+  { at: 1940, name: 'Comprehensive exam', gate: true, text: 'Everything you have read, in three hours.' },
+  { at: 2000, name: 'Graduation', text: '' },
+];
+const PROFS = [
+  { name: 'Fighter Pilot', money: 1600, mult: 1, blurb: 'Plenty of per diem. Has not opened a book since UPT.' },
+  { name: 'Maintenance Officer', money: 800, mult: 2, blurb: 'Fixes any laptop. Sleeps four hours. Hardened by the flightline.' },
+  { name: 'Army Exchange Officer', money: 400, mult: 3, blurb: 'Brought own doctrine. Immune to mission command events.' },
+];
+const NAMES = ['Diaz', 'Nguyen', 'Cole', 'Park', 'Okafor', 'Brennan', 'Ruiz', 'Singh', 'Miller', 'Kowalski', 'Tanaka', 'Holt', 'Reyes', 'Larsen'];
+const RANKS = ['Maj', 'Maj', 'Maj', 'Lt Col', 'CDR', 'LCDR', 'Maj (USMC)'];
+const STORE = [
+  { key: 'coffee', name: 'Coffee (cups)', unit: 0.10, blurb: 'Your seminar drinks it like the wagon ate oxen.' },
+  { key: 'cac', name: 'Spare CAC readers', unit: 25, blurb: 'One will die at the worst possible time.' },
+  { key: 'blues', name: 'Sets of blues', unit: 90, blurb: 'For inspections and coffee accidents.' },
+  { key: 'cards', name: 'Index cards (packs)', unit: 6, blurb: 'Ammunition for study group.' },
+];
+const RATIONS = [['Skim', 3, 'Read the introduction and conclusion.'], ['Assigned', 6, 'What the syllabus says.'], ['Everything', 10, 'Footnotes too. Health improves, coffee vanishes.']];
+const PACES = [['Steady', 70, 0], ['Strenuous', 95, 2], ['Grueling', 120, 5]];
+const START = new Date(2026, 7, 3);
+const dateStr = w => { const d = new Date(START); d.setDate(d.getDate() + (w - 1) * 7); return d.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' }); };
+const WEATHER = [['Hot and humid', 6], ['Thunderstorms', 4], ['Heavy fog', 3], ['Tornado watch', 1], ['Pleasant, suspiciously', 3], ['Pollen apocalypse', 2], ['Cold snap', 2], ['Drizzle', 3]];
+const TALK = [
+  ['Maj Reyes, fighter pilot', 'I have not read the Clausewitz. I have read the summary of the Clausewitz. It was long.'],
+  ['LCDR Park, Navy', 'Corbett was right. Mahan was loud. Both are on the exam.'],
+  ['Maj Okafor, Army', 'Mission command is simple. Tell them what, not how. Then watch what happens.'],
+  ['Capt Tanaka, Marines', 'The center of gravity is wherever the instructor says it is this week.'],
+  ['Lt Col Holt, instructor', 'The rubric is your friend. The rubric is also 11 pages.'],
+  ['Maj Singh, intel', 'Warden had five rings. I have five open tabs and none of them are the reading.'],
+  ['A first-year student', 'Is it true the research paper has to be in Chicago style? Is Chicago a place?'],
+  ['The librarian', 'Someone has checked out every copy of On War. We suspect the Army exchange officer.'],
+  ['Maj Brennan, cyber', 'I automated my footnotes. Now they cite each other.'],
+  ['CDR Larsen, Navy', 'Every problem is airpower-shaped, apparently. Even the parking.'],
+  ['Maj Kowalski, logistics', 'Coffee is the real center of gravity. Attack it and the seminar collapses.'],
+  ['A retired colonel at the O-Club', 'In my day we did the JPP in seven steps. Now it is seven steps and a slide deck.'],
+];
+const TRADES = [
+  { give: 'blues', gn: 'a set of blues', g: 1, get: 'coffee', tn: '60 cups of coffee', t: 60 },
+  { give: 'cards', gn: '2 packs of index cards', g: 2, get: 'coffee', tn: '40 cups of coffee', t: 40 },
+  { give: 'coffee', gn: '80 cups of coffee', g: 80, get: 'cac', tn: 'a spare CAC reader', t: 1 },
+  { give: 'coffee', gn: '50 cups of coffee', g: 50, get: 'cards', tn: '3 packs of index cards', t: 3 },
+  { give: 'cac', gn: 'a spare CAC reader', g: 1, get: 'coffee', tn: '90 cups of coffee', t: 90 },
+];
+const AILMENTS = ['PowerPoint poisoning', 'a case of the acronyms', 'seminar fatigue', 'Chicago-style footnote strain', 'chronic humidity', 'a bad guest lecture', 'group-project dysentery'];
+const EXITS = ['has been reassigned to a staff job mid-year', 'has been medically evacuated to the O-Club', 'has transferred to distance learning', 'was last seen heading for the Auburn game', 'has died of PowerPoint'];
+const EVENTS = [
+  { w: 8, f: s => { const m = alive(s); if (!m.length) return null; const p = pick(m); const a = pick(AILMENTS); p.hp -= 15; p.ail = a; p.ailW = 3; return `${p.name} has ${a}.`; } },
+  { w: 5, f: s => { if (s.cac > 0) { s.cac--; return 'Your CAC reader died. You had a spare. The maintainer nods.'; } s.week++; return 'Your CAC reader died. No spare. Lost a week to the help desk.'; } },
+  { w: 5, f: s => { s.coffee = Math.max(0, s.coffee - 40); return 'A first-year found the seminar coffee stash. Lost 40 cups.'; } },
+  { w: 3, f: s => { s.week++; return 'You cited MLA instead of Chicago. Lost a week reformatting.'; } },
+  { w: 4, f: s => { s.pages = Math.max(0, s.pages - 30); return 'The library recalled your copy of On War. Fell 30 pages behind.'; } },
+  { w: 4, f: s => { alive(s).forEach(m => m.hp -= 6); return 'Alabama humidity. Everyone wilts.'; } },
+  { w: 4, f: s => { alive(s).forEach(m => m.hp = Math.min(100, m.hp + 10)); return 'Free lunch at the club. Health improves.'; } },
+  { w: 3, f: s => { s.money += 60; return 'Found $60 in an old flight suit. Per diem restored.'; } },
+  { w: 3, f: s => { if (s.blues > 0) { s.blues--; return 'Coffee on your blues before the inspection. You had a spare set.'; } alive(s).forEach(m => m.hp -= 8); return 'Coffee on your blues before the inspection. No spare. Everyone got the talk.'; } },
+  { w: 3, f: s => { s.week++; return 'A guest lecturer said "synergy" fourteen times. The seminar lost a week recovering.'; } },
+  { w: 4, f: s => { if (s.prof === 2) return 'A mission command debate broke out. The Army officer settled it in one sentence.'; s.week++; s.pages += 40; return 'The Army officer explained mission command. Again. Lost a week, gained 40 pages.'; } },
+  { w: 3, f: s => { s.pages = Math.max(0, s.pages - 20); return 'Someone said "strategic corporal" unironically. Fell 20 pages behind.'; } },
+  { w: 3, f: s => { s.cards += 2; return 'Found two packs of index cards in the seminar room.'; } },
+  { w: 3, f: s => { s.pages += 60; return 'Snow day in Montgomery. Two inches. Everyone actually read.'; } },
+  { w: 3, f: s => { const m = alive(s); if (m.length < 2) return null; const p = pick(m); p.hp += 15; p.ail = null; return `${p.name} discovered the Fairchild library has a quiet floor. Health improved.`; } },
+];
+
+// ---------- helpers ----------
+const rnd = (a, b) => a + Math.random() * (b - a);
+const pick = a => a[Math.floor(Math.random() * a.length)];
+const shuffle = a => a.slice().sort(() => Math.random() - 0.5);
+const alive = s => s.party.filter(m => m.hp > 0);
+const hpWord = h => h > 75 ? 'Good' : h > 50 ? 'Fair' : h > 25 ? 'Poor' : h > 0 ? 'Very poor' : 'Gone';
+const scr = document.getElementById('screen');
+function render(html, actions = []) {
+  scr.innerHTML = html;
+  for (const a of actions) {
+    const b = document.createElement('button'); b.className = 'btn' + (a.gold ? ' gold' : ''); b.innerHTML = a.label; b.disabled = !!a.off;
+    b.addEventListener('click', a.fn); scr.appendChild(b);
+  }
+  scr.scrollTop = 0; window.scrollTo({ top: scr.getBoundingClientRect().top + window.scrollY - 60, behavior: 'smooth' });
+}
+
+// ---------- state ----------
+let S, questionPool = [], TOPTEN = [];
+function newGame() {
+  S = { prof: 0, money: 0, mult: 1, party: [], coffee: 0, cac: 0, blues: 0, cards: 0, pages: 0, week: 1, ration: 1, pace: 0, landmark: 0, log: [], correct: 0, asked: 0, weather: 'Hot and humid', report: 1 };
+  questionPool = shuffle(BANK.map((_, i) => i));
+}
+function nextQuestion() { if (!questionPool.length) questionPool = shuffle(BANK.map((_, i) => i)); return BANK[questionPool.pop()]; }
+
+// ---------- screens ----------
+function title() {
+  newGame();
+  render(`<h2>THE ACSC TRAIL</h2>
+<p>You may:</p>`, [
+    { label: '1. Travel the trail', fn: chooseProf },
+    { label: '2. Learn about the trail', fn: about },
+    { label: '3. See the top ten graduates', fn: topTen },
+  ]);
+}
+function about() {
+  render(`<h2>ABOUT THE TRAIL</h2>
+<p>Your seminar of five must get through 2,000 pages of reading before week 40. Coffee keeps them alive. Reading load and pace trade health for progress.</p>
+<p>At major assignments you face a <span class="gold">doctrinal question</span>. Answer correctly and press on. Answer wrongly and the seminar suffers.</p>
+<p>Every week the seminar meets and you answer a question. At major assignments you choose: attempt it, wing it, ask the Army officer, or wait a week and catch up.</p>
+<p>Study group lets you earn coffee by answering questions, one pack of index cards per session. You can also trade and talk to people.</p>
+<p class="dim">Party members can be lost to PowerPoint. Choose your reading load wisely.</p>`, [{ label: 'Back', fn: title }]);
+}
+function chooseProf() {
+  render(`<h2>Many kinds of officers made the trip to Maxwell. You may:</h2>`,
+    PROFS.map((p, i) => ({ label: `${i + 1}. Be a ${p.name}<br><span class="dim">$${p.money} per diem. ${p.blurb}</span>`, fn: () => { S.prof = i; S.money = p.money; S.mult = p.mult; nameParty(); } })));
+}
+function nameParty() {
+  const defaults = shuffle(NAMES).slice(0, 5).map((n, i) => (i ? pick(RANKS) + ' ' : 'Maj ') + n);
+  render(`<h2>What are the names of the five members of your seminar?</h2>
+${defaults.map((d, i) => `<input type="text" id="n${i}" value="${d}" maxlength="22">`).join('')}`,
+    [{ label: 'Confirm seminar roster', fn: () => {
+      S.party = defaults.map((d, i) => ({ name: (document.getElementById('n' + i).value.trim() || d).slice(0, 22), hp: 100, ail: null }));
+      reportDate();
+    } }]);
+}
+function reportDate() {
+  render(`<h2>When do you report to Maxwell?</h2><p class="dim">Report early and you get a head start on the reading. Report late and you skip in-processing, which nobody misses.</p>`, [
+    { label: '1. July: early, keen, 120 pages ahead', fn: () => { S.report = 0; S.pages = 120; S.week = 1; store(true); } },
+    { label: '2. August: on time, like everyone else', fn: () => { S.report = 1; store(true); } },
+    { label: '3. Late August: skipped in-processing, +$200 in unspent leave', fn: () => { S.report = 2; S.money += 200; S.week = 3; store(true); } },
+  ]);
+}
+function store(first) {
+  const mark = first ? 1 : 1.5;
+  const qty = {}; STORE.forEach(it => qty[it.key] = 0);
+  const total = () => STORE.reduce((a, it) => a + qty[it.key] * it.unit * mark, 0);
+  render(`<h2>${first ? 'AU BOOKSTORE, Maxwell AFB' : 'THE BOOKSTORE IS OPEN'}</h2>
+<p class="dim">${first ? 'Before you set out, buy coffee, spare CAC readers, blues, and index cards. Five people on the assigned load drink about 30 cups a week, and the year is 40 weeks long.' : 'Prices have gone up. They always do.'}</p>
+<p>Per diem: <span class="gold">$${S.money}</span> &nbsp; Bill: <span class="gold" id="bill">$0</span></p>
+${STORE.map(it => `<div class="stat"><span>${it.name}</span><span>$${(it.unit * mark).toFixed(2)} ea &nbsp; have ${S[it.key]}</span></div>
+<input type="number" inputmode="numeric" min="0" step="1" value="0" data-key="${it.key}" aria-label="${it.name}">
+<p class="dim">${it.blurb}</p>`).join('')}`,
+    [{ label: first ? 'Leave the bookstore and begin the year' : 'Leave the bookstore', gold: true, fn: () => {
+      const bill = Math.round(total());
+      if (bill > S.money) { alert('You cannot afford $' + bill + '. This is not the O-Club.'); return; }
+      S.money -= bill; STORE.forEach(it => S[it.key] += qty[it.key]);
+      if (first) { S.landmark = 0; landmark(); } else trail();
+    } }]);
+  scr.querySelectorAll('input[data-key]').forEach(inp => inp.addEventListener('input', () => {
+    qty[inp.dataset.key] = Math.max(0, Math.floor(+inp.value || 0));
+    const b = document.getElementById('bill'); b.textContent = '$' + Math.round(total()); b.className = total() > S.money ? 'warn' : 'gold';
+  }));
+}
+function status() {
+  const nextLm = LANDMARKS.find(l => l.at > S.pages) || LANDMARKS[LANDMARKS.length - 1];
+  return `<div class="stat"><span>Date</span><span>${dateStr(S.week)}</span></div>
+<div class="stat"><span>Week</span><span>${S.week} of ${WEEKS_MAX}</span></div>
+<div class="stat"><span>Weather</span><span>${S.weather}</span></div>
+<div class="stat"><span>Pages read</span><span>${S.pages} / ${PAGES_TOTAL}</span></div>
+<div class="bar"><i style="width:${(S.pages / PAGES_TOTAL * 100).toFixed(1)}%"></i></div>
+<div class="stat"><span>Next: ${nextLm.name}</span><span>${Math.max(0, nextLm.at - S.pages)} pp</span></div>
+<div class="stat"><span>Coffee</span><span>${S.coffee} cups</span></div>
+<div class="stat"><span>Reading load</span><span>${RATIONS[S.ration][0]}</span></div>
+<div class="stat"><span>Pace</span><span>${PACES[S.pace][0]}</span></div>
+<div class="stat"><span>Seminar health</span><span>${overall()}</span></div>
+<div class="stat"><span>Per diem</span><span>$${S.money}</span></div>`;
+}
+function overall() { const m = alive(S); if (!m.length) return 'Gone'; return hpWord(m.reduce((a, b) => a + b.hp, 0) / m.length); }
+function trail(msg) {
+  render(`${msg ? `<p class="gold">${msg}</p>` : ''}${status()}<p>You may:</p>`, [
+    { label: '1. Continue on the trail', gold: true, fn: step },
+    { label: '2. Check supplies and seminar', fn: supplies },
+    { label: '3. Change reading load', fn: () => render('<h2>READING LOAD</h2>', RATIONS.map((r, i) => ({ label: `${r[0]}<br><span class="dim">${r[2]} (${r[1]} cups/member/week)</span>`, fn: () => { S.ration = i; trail(); } }))) },
+    { label: '4. Change pace', fn: () => render('<h2>PACE</h2>', PACES.map((p, i) => ({ label: `${p[0]}<br><span class="dim">${p[1]} pages/week, health toll ${p[2]}</span>`, fn: () => { S.pace = i; trail(); } }))) },
+    { label: '5. Rest a week', fn: () => { S.week++; alive(S).forEach(m => { m.hp = Math.min(100, m.hp + 18); if (m.hp > 60) m.ail = null; }); consume(); afterTurn('The seminar rests. Nobody mentions the reading.'); } },
+    { label: '6. Study group (1 pack of index cards)', off: S.cards < 1, fn: studyGroup },
+    { label: '7. Consult the syllabus (map)', fn: map },
+    { label: '8. Attempt to trade', fn: trade },
+    { label: '9. Talk to people', fn: talk },
+  ]);
+}
+function talk() {
+  const [who, what] = pick(TALK);
+  render(`<h2>${who}</h2><p>"${what}"</p>`, [{ label: 'Back', fn: () => trail() }]);
+}
+function trade() {
+  const tr = pick(TRADES);
+  if (Math.random() < 0.3) return render('<h2>NO TRADERS</h2><p>Nobody wants to trade this week. Everyone is behind on the reading.</p>', [{ label: 'Back', fn: () => trail() }]);
+  const can = S[tr.give] >= tr.g;
+  render(`<h2>A student from another seminar offers ${tr.tn} for ${tr.gn}.</h2>${can ? '' : '<p class="warn">You do not have enough to trade.</p>'}`, [
+    { label: 'Accept the trade', gold: true, off: !can, fn: () => { S[tr.give] -= tr.g; S[tr.get] += tr.t; trail('Traded ' + tr.gn + ' for ' + tr.tn + '.'); } },
+    { label: 'Decline', fn: () => trail() },
+  ]);
+}
+function supplies() {
+  render(`<h2>SUPPLIES</h2>
+<div class="stat"><span>Coffee</span><span>${S.coffee} cups</span></div>
+<div class="stat"><span>Spare CAC readers</span><span>${S.cac}</span></div>
+<div class="stat"><span>Sets of blues</span><span>${S.blues}</span></div>
+<div class="stat"><span>Index cards</span><span>${S.cards} packs</span></div>
+<div class="stat"><span>Per diem</span><span>$${S.money}</span></div>
+<h2 style="margin-top:12px">SEMINAR</h2>
+${S.party.map(m => `<div class="stat"><span>${m.name}</span><span class="${m.hp <= 25 ? 'warn' : ''}">${hpWord(m.hp)}${m.ail && m.hp > 0 ? ' (' + m.ail + ')' : ''}</span></div>`).join('')}
+<p class="dim" style="margin-top:8px">Questions answered: ${S.correct} of ${S.asked}</p>`, [{ label: 'Back', fn: () => trail() }]);
+}
+function map() {
+  render(`<h2>THE SYLLABUS</h2>${LANDMARKS.map(l => `<div class="stat"><span class="${l.at <= S.pages ? 'dim' : ''}">${l.gate ? '! ' : ''}${l.name}</span><span>${l.at}</span></div>`).join('')}<p class="dim">! = doctrinal question ahead</p>`, [{ label: 'Back', fn: () => trail() }]);
+}
+function consume() {
+  const m = alive(S), need = m.length * RATIONS[S.ration][1];
+  if (S.coffee >= need) { S.coffee -= need; m.forEach(x => x.hp = Math.min(100, x.hp + (S.ration === 2 ? 6 : S.ration === 1 ? 3 : -3))); }
+  else { S.coffee = 0; m.forEach(x => x.hp -= 10); S.log.push('OUT OF COFFEE. The seminar is decaffeinated and dangerous.'); }
+  m.forEach(x => { x.hp -= PACES[S.pace][2]; if (x.ail) { x.hp -= 3; if (--x.ailW <= 0) x.ail = null; } });
+}
+function step() {
+  S.before = S.pages;
+  askQuestion(`Week ${S.week} seminar. ${S.weather}.`, (ok, right) => {
+    if (ok) { S.pages = Math.min(PAGES_TOTAL, S.pages + 15); alive(S).forEach(m => m.hp = Math.min(100, m.hp + 2)); travel('Seminar went well. +15 pages.'); }
+    else { alive(S).forEach(m => m.hp -= 4); travel(`Seminar went badly. The answer was: <span class="gold">${right}</span>.`); }
+  }, false);
+}
+function travel(note) {
+  S.log = note ? [note] : [];
+  S.weather = weighted(WEATHER.map(([n, w]) => ({ n, w }))).n;
+  if (S.weather === 'Heavy fog') S.log.push('Heavy fog. Nobody can find the seminar room.');
+  if (S.weather === 'Tornado watch' && Math.random() < 0.5) { S.week++; S.log.push('Tornado watch. A week lost sheltering in the hallway with the Marines.'); }
+  S.week++;
+  const before = S.before;
+  S.pages = Math.min(PAGES_TOTAL, S.pages + PACES[S.pace][1]);
+  consume();
+  if (Math.random() < 0.45) { const ev = weighted(EVENTS).f(S); if (ev) S.log.push(ev); }
+  // landmark crossed?
+  const lm = LANDMARKS.find(l => l.at > before && l.at <= S.pages);
+  if (lm) { S.landmark = LANDMARKS.indexOf(lm); afterTurn(null, () => landmark()); }
+  else afterTurn();
+}
+function weighted(list) { const tot = list.reduce((a, e) => a + e.w, 0); let r = Math.random() * tot; for (const e of list) { r -= e.w; if (r <= 0) return e; } return list[0]; }
+function afterTurn(extra, next) {
+  const msgs = extra ? [extra, ...S.log] : S.log.slice();
+  // departures
+  for (const m of S.party) if (m.hp <= 0 && !m.gone) { m.gone = true; m.hp = 0; msgs.push(`<span class="warn">${m.name} ${pick(EXITS)}.</span>`); }
+  if (!alive(S).length) return gameOver('lost');
+  if (S.week > WEEKS_MAX) return gameOver('time');
+  if (msgs.length) render(`<h2>WEEK ${S.week}</h2>${msgs.map(x => `<p>${x}</p>`).join('')}`, [{ label: 'Continue', fn: () => next ? next() : trail() }]);
+  else next ? next() : trail();
+}
+function landmark() {
+  const lm = LANDMARKS[S.landmark];
+  if (lm.at >= PAGES_TOTAL) return gameOver('won');
+  const acts = [];
+  if (lm.gate) acts.push({ label: 'Face the question', gold: true, fn: () => gate(lm) });
+  else acts.push({ label: 'Continue on the trail', gold: true, fn: () => trail() });
+  if (lm.store) acts.push({ label: 'Visit the bookstore', fn: () => store(false) });
+  if (lm.rest) acts.push({ label: 'Rest a week', fn: () => { S.week++; alive(S).forEach(m => { m.hp = Math.min(100, m.hp + 25); m.ail = null; }); consume(); afterTurn('Everyone recovers. Slightly.'); } });
+  render(`<h2>${lm.name}</h2><p>${lm.text}</p><p class="dim">Week ${S.week}. ${S.pages} pages read.</p>`, acts);
+}
+function askQuestion(intro, onResult, allowTutor, remove = 0) {
+  const [q, answers] = nextQuestion();
+  let opts = answers.map((a, i) => ({ a, ok: i === 0 }));
+  opts = shuffle(opts);
+  while (remove-- > 0 && opts.length > 2) { const w = opts.find(o => !o.ok); opts = opts.filter(o => o !== w); }
+  const draw = () => {
+    S.asked_pending = true;
+    const acts = opts.map((o, i) => ({ label: `${'ABCD'[i]}. ${o.a}`, fn: () => { S.asked++; if (o.ok) S.correct++; onResult(o.ok, answers[0]); } }));
+    if (allowTutor && S.money >= 40 && opts.length > 2) acts.push({ label: 'Hire a tutor ($40): remove two wrong answers', fn: () => { S.money -= 40; const wrong = opts.filter(o => !o.ok); opts = opts.filter(o => o.ok || o === wrong[0]); draw(); } });
+    render(`${intro ? `<p class="dim">${intro}</p>` : ''}<h2>${q}</h2>`, acts);
+  };
+  draw();
+}
+function gate(lm) {
+  render(`<h2>${lm.name}</h2><p>${lm.text}</p><p>You may:</p>`, [
+    { label: '1. Attempt the assignment (answer the question)', gold: true, fn: () => gateQ(lm, 0) },
+    { label: '2. Wing it (skip the question, 50/50 it goes badly)', fn: () => { if (Math.random() < 0.5) gatePass('You winged it. It somehow worked. The instructor suspects nothing.'); else gateFail(null, 'You winged it. It went badly. Very badly.'); } },
+    { label: '3. Ask the Army officer for help ($40: two wrong answers removed)', off: S.money < 40, fn: () => { S.money -= 40; gateQ(lm, 2); } },
+    { label: '4. Wait a week and catch up on the reading (one wrong answer removed)', fn: () => { S.week++; consume(); gateQ(lm, 1); } },
+  ]);
+}
+function gateQ(lm, remove) {
+  askQuestion(`${lm.name}. Choose wisely.`, (ok, right) => ok ? gatePass('The seminar nods. The instructor writes something down. +$40 per diem, health improves.') : gateFail(right), false, remove);
+}
+function gatePass(msg) {
+  S.money += 40; alive(S).forEach(m => m.hp = Math.min(100, m.hp + 8));
+  render(`<h2>PASSED</h2><p>${msg}</p>`, [{ label: 'Continue on the trail', gold: true, fn: () => trail() }]);
+}
+function gateFail(right, msg) {
+  S.week++; S.coffee = Math.max(0, S.coffee - 25); alive(S).forEach(m => m.hp -= 15); const v = pick(alive(S)); if (v) { v.ail = 'a rewrite'; v.ailW = 2; }
+  render(`<h2>FAILED</h2>${right ? `<p>The answer was: <span class="gold">${right}</span>.</p>` : `<p>${msg}</p>`}<p>You lost a week rewriting, 25 cups of coffee, and everyone's health. ${v ? v.name + ' has been assigned the rewrite.' : ''}</p>`, [{ label: 'Continue', fn: () => afterTurn() }]);
+}
+function studyGroup() {
+  S.cards--; let n = 0, got = 0;
+  const ask = () => {
+    if (n >= 5) { const cups = got * 30 - (5 - got) * 5; S.coffee = Math.max(0, S.coffee + cups); S.week++; consume();
+      return afterTurn(`Study group over. ${got} of 5 correct. ${cups >= 0 ? 'Grateful classmates bought ' + cups + ' cups of coffee.' : 'You owe the seminar ' + (-cups) + ' cups.'} A week has passed.`); }
+    n++;
+    askQuestion(`Study group, question ${n} of 5. Correct answers earn coffee.`, ok => { if (ok) got++; ask(); }, false);
+  };
+  ask();
+}
+function gameOver(kind) {
+  const m = alive(S);
+  if (kind === 'lost') {
+    render(`<h2>YOUR SEMINAR HAS BEEN LOST</h2><p>All five members are gone. The seminar room is quiet. Someone else's reading list is laminated now.</p>
+<p>Write an epitaph for the seminar:</p><input type="text" id="epi" value="Died of PowerPoint." maxlength="40">`, [{ label: 'Carve it', gold: true, fn: () => {
+      const e = document.getElementById('epi').value || 'Died of PowerPoint.';
+      render(`<pre style="color:#7fc78f;font-size:8px;line-height:1.5;margin:0 0 12px">
+   _______________
+  /               \\
+ /   HERE LIES     \\
+|  THE SEMINAR OF   |
+|  ${S.party[0].name.padEnd(17).slice(0, 17)}|
+|                   |
+|  "${e.slice(0, 15).padEnd(15)}"|
+|___________________|</pre>`, [{ label: 'Try the trail again', gold: true, fn: title }]);
+    } }]);
+    return;
+  }
+  const late = kind === 'time';
+  const hpPts = h => h > 75 ? 500 : h > 50 ? 400 : h > 25 ? 300 : 200;
+  const rows = [
+    ['Seminar members in good health', m.filter(x => x.hp > 75).length * 500],
+    ['Seminar members in fair health', m.filter(x => x.hp > 50 && x.hp <= 75).length * 400],
+    ['Seminar members in poor health', m.filter(x => x.hp > 25 && x.hp <= 50).length * 300],
+    ['Seminar members in very poor health', m.filter(x => x.hp > 0 && x.hp <= 25).length * 200],
+    ['Coffee (1 per 25 cups)', Math.floor(S.coffee / 25)],
+    ['Spare CAC readers (20 each)', S.cac * 20],
+    ['Sets of blues (20 each)', S.blues * 20],
+    ['Index cards (5 per pack)', S.cards * 5],
+    ['Per diem (1 per $5)', Math.floor(S.money / 5)],
+    ['Questions answered correctly (25 each)', S.correct * 25],
+    [late ? 'Finished on time' : 'Finished on time (bonus)', late ? 0 : 300],
+  ];
+  const sub = rows.reduce((a, r) => a + r[1], 0), pts = sub * S.mult;
+  const rank = late ? 'Graduate, with an asterisk' : m.length === 5 && m.every(x => x.hp > 50) ? 'Distinguished Graduate' : m.length >= 3 ? 'Graduate' : 'Graduate. Barely. Alone.';
+  TOPTEN.push({ name: S.party[0].name, pts, rank }); TOPTEN.sort((a, b) => b.pts - a.pts); TOPTEN = TOPTEN.slice(0, 10);
+  render(`<h2>${late ? 'WEEK 40. THE YEAR IS OVER.' : 'GRADUATION'}</h2>
+<p>${late ? 'You did not finish the reading. You graduated anyway. Everyone does.' : 'The seminar crosses the stage at the Polifka Auditorium.'} ${m.length} of 5 made it.</p>
+${S.party.map(x => `<div class="stat"><span>${x.name}</span><span>${hpWord(x.hp)}</span></div>`).join('')}
+<h2 style="margin-top:12px">POINTS</h2>
+${rows.map(r => `<div class="stat"><span>${r[0]}</span><span>${r[1]}</span></div>`).join('')}
+<div class="stat"><span>Subtotal</span><span>${sub}</span></div>
+<div class="stat"><span>${PROFS[S.prof].name} multiplier</span><span>x${S.mult}</span></div>
+<p class="gold" style="margin-top:10px">${rank}<br>Score: ${pts}</p>`, [{ label: 'See the top ten graduates', fn: topTen }, { label: 'Travel the trail again', gold: true, fn: title }]);
+}
+function topTen() {
+  render(`<h2>TOP TEN GRADUATES</h2>${TOPTEN.length ? TOPTEN.map((t, i) => `<div class="stat"><span>${i + 1}. ${t.name}</span><span>${t.pts}</span></div><p class="dim">${t.rank}</p>`).join('') : '<p class="dim">Nobody has graduated yet. The class is still in seminar.</p>'}<p class="dim">This list lasts until you close the page.</p>`, [{ label: 'Back', fn: title }]);
+}
+
+// ---------- scene ----------
+const sc = document.getElementById('scene'), sx = sc.getContext('2d');
+let sceneT = 0, lastT = 0;
+function scene(ts) {
+  const dt = Math.min(0.05, (ts - lastT) / 1000 || 0); lastT = ts; sceneT += dt;
+  const W = 400, H = 100, moving = !!S && S.party.length > 0 && alive(S).length > 0;
+  sx.fillStyle = '#040804'; sx.fillRect(0, 0, W, H);
+  const prog = S ? S.pages / PAGES_TOTAL : 0;
+  const scroll = (S ? S.pages * 3 : 0) + (moving ? sceneT * 0 : 0);
+  sx.fillStyle = '#1f8a3e';
+  for (let i = 0; i < 14; i++) { const hx = ((i * 60 - scroll * 0.3) % (W + 80) + W + 80) % (W + 80) - 40; const hh = 10 + (i * 7) % 16; sx.fillRect(hx, 66 - hh, 40, hh); }
+  sx.fillStyle = '#39ff6a'; sx.fillRect(0, 66, W, 2);
+  sx.fillStyle = '#0f4a22'; sx.fillRect(0, 68, W, 32);
+  sx.fillStyle = '#39ff6a';
+  for (let i = 0; i < 12; i++) { const gx = ((i * 45 - scroll) % (W + 20) + W + 20) % (W + 20) - 10; sx.fillRect(gx, 72 + (i % 3) * 8, 3, 2); }
+  // landmark post
+  if (S) { const next = LANDMARKS.find(l => l.at > S.pages); if (next) { const px = 120 + (next.at - S.pages) * 0.9; if (px < W) { sx.fillStyle = '#f2c14e'; sx.fillRect(px, 40, 2, 26); sx.fillRect(px, 40, 12, 7); } } }
+  // the wagon: a golf cart stacked with books
+  const bob = moving ? Math.sin(sceneT * 8) : 0;
+  const wx = 80, wy = 58 + bob;
+  sx.fillStyle = '#7fc78f';
+  sx.fillRect(wx, wy - 12, 34, 12); sx.fillRect(wx + 4, wy - 22, 22, 10);
+  sx.fillStyle = '#f2c14e'; for (let i = 0; i < 4; i++) sx.fillRect(wx + 6 + i * 5, wy - 30 + (i % 2) * 2, 4, 8);
+  sx.fillStyle = '#39ff6a'; sx.fillRect(wx + 5, wy, 6, 6); sx.fillRect(wx + 23, wy, 6, 6);
+  sx.fillStyle = '#040804'; sx.fillRect(wx + 7 + (moving ? Math.round(sceneT * 6) % 3 : 0), wy + 2, 2, 2); sx.fillRect(wx + 25 + (moving ? Math.round(sceneT * 6 + 1) % 3 : 0), wy + 2, 2, 2);
+  sx.font = '7px "Press Start 2P", monospace'; sx.fillStyle = '#7fc78f'; sx.textBaseline = 'top';
+  sx.fillText(S && S.party.length ? `MAXWELL AFB  ->  GRADUATION   ${Math.round(prog * 100)}%` : 'THE ACSC TRAIL', 8, 8);
+  sx.fillStyle = 'rgba(57,255,106,.2)'; sx.fillRect(8, 20, 384, 3); sx.fillStyle = '#39ff6a'; sx.fillRect(8, 20, 384 * prog, 3);
+  requestAnimationFrame(scene);
+}
+requestAnimationFrame(scene);
+title();
+})();
+</script>
+</body>
+</html>
